@@ -1,0 +1,14 @@
+{
+  "input_path": "./data/JournalEntries.csv",
+  "output_path": "./output",
+  "ledger_id": "300000003864052",
+  "user_je_source_name": "Chargebee",
+  "user_je_category_name": "Manual",
+  "ledger_name": "USA PL USD US GAAP",
+  "base_url": "https://your-fusion-instance.fa.ocs.oraclecloud.com",
+  "api_username": "your_username",
+  "api_password": "your_password",
+  "document_account": "fin$/generalLedger$/import$",
+  "parameter_list": "#NULL,Vision Operations,#NULL,#NULL,#NULL,#NULL,#NULL,INVOICE GATEWAY,#NULL,#NULL,#NULL,1,#NULL",
+  "poll_interval_seconds": 300
+}

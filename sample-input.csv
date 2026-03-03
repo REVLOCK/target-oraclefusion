@@ -1,0 +1,31 @@
+Transaction Date,Journal Entry Id,Account Number,Account Name,Class,Customer Name,Description,Amount,Posting Type,Currency,Department,Location,Discord Channel,Tier
+2025-12-31,123125 UR_Recl USD 1 1771425740739,120015,Unbilled Receivable,,,202512 Unbilled Receivable Reclass,103900,Debit,USD,,CA,,
+2025-12-31,123125 UR_Recl USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Unbilled Receivable Reclass,103900,Credit,USD,,CA,,
+2025-12-31,123125 UR_Recl USD 1 1771425740739,120015,Unbilled Receivable,,,202512 Unbilled Receivable Reclass,183787.51,Debit,USD,1000,0000,,
+2025-12-31,123125 UR_Recl USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Unbilled Receivable Reclass,183787.51,Credit,USD,1000,0000,,
+2025-12-31,123125 UR_Recl USD 1 1771425740739,120015,Unbilled Receivable,,,202512 Unbilled Receivable Reclass,1140.05,Debit,USD,1000,0000,625,
+2025-12-31,123125 UR_Recl USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Unbilled Receivable Reclass,1140.05,Credit,USD,1000,0000,625,
+2025-12-31,123125 UR_Recl USD 1 1771425740739,120015,Unbilled Receivable,,,202512 Unbilled Receivable Reclass,169502.4,Debit,USD,1000,LA,615,T1
+2025-12-31,123125 UR_Recl USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Unbilled Receivable Reclass,169502.4,Credit,USD,1000,LA,615,T1
+2025-12-31,123125 UR_Recl USD 1 1771425740739,120015,Unbilled Receivable,,,202512 Unbilled Receivable Reclass,115026,Debit,USD,1000,LA,615,T2
+2025-12-31,123125 UR_Recl USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Unbilled Receivable Reclass,115026,Credit,USD,1000,LA,615,T2
+2025-12-31,123125 UR_Recl USD 1 1771425740739,120015,Unbilled Receivable,,,202512 Unbilled Receivable Reclass,159500.01,Debit,USD,1000,LA,620,T1
+2025-12-31,123125 UR_Recl USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Unbilled Receivable Reclass,159500.01,Credit,USD,1000,LA,620,T1
+2025-12-31,123125 UR_Recl USD 1 1771425740739,120015,Unbilled Receivable,,,202512 Unbilled Receivable Reclass,81166.67,Debit,USD,1000,LA,620,T2
+2025-12-31,123125 UR_Recl USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Unbilled Receivable Reclass,81166.67,Credit,USD,1000,LA,620,T2
+2025-12-31,123125 UR_Recl USD 1 1771425740739,120015,Unbilled Receivable,,,202512 Unbilled Receivable Reclass,13404.44,Debit,USD,1000,LA,620,T3
+2025-12-31,123125 UR_Recl USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Unbilled Receivable Reclass,13404.44,Credit,USD,1000,LA,620,T3
+2025-12-31,123125 Rev_Rec USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Revenue Recognition,14000,Credit,USD,,CA,,
+2025-12-31,123125 Rev_Rec USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Revenue Recognition,16000,Debit,USD,,CA,,
+2025-12-31,123125 Rev_Rec USD 1 1771425740739,420010,Non-Subscription,,,202512 Revenue Recognition,16000,Credit,USD,,CA,,
+2025-12-31,123125 Rev_Rec USD 1 1771425740739,420010,Non-Subscription,,,202512 Revenue Recognition,14000,Debit,USD,,CA,,
+2025-12-31,123125 Rev_Rec USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Revenue Recognition,195.73,Debit,USD,1000,0000,,
+2025-12-31,123125 Rev_Rec USD 1 1771425740739,420010,Non-Subscription,,,202512 Revenue Recognition,195.73,Credit,USD,1000,0000,,
+2025-12-31,123125 Rev_Rec USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Revenue Recognition,1140.05,Debit,USD,1000,0000,625,
+2025-12-31,123125 Rev_Rec USD 1 1771425740739,420010,Non-Subscription,,,202512 Revenue Recognition,1140.05,Credit,USD,1000,0000,625,
+2025-12-31,123125 Rev_Rec USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Revenue Recognition,159500.01,Debit,USD,1000,LA,620,T1
+2025-12-31,123125 Rev_Rec USD 1 1771425740739,420010,Non-Subscription,,,202512 Revenue Recognition,159500.01,Credit,USD,1000,LA,620,T1
+2025-12-31,123125 Rev_Rec USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Revenue Recognition,81166.67,Debit,USD,1000,LA,620,T2
+2025-12-31,123125 Rev_Rec USD 1 1771425740739,420010,Non-Subscription,,,202512 Revenue Recognition,81166.67,Credit,USD,1000,LA,620,T2
+2025-12-31,123125 Rev_Rec USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Revenue Recognition,13404.44,Debit,USD,1000,LA,620,T3
+2025-12-31,123125 Rev_Rec USD 1 1771425740739,420010,Non-Subscription,,,202512 Revenue Recognition,13404.44,Credit,USD,1000,LA,620,T3

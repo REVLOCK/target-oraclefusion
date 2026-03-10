@@ -3,6 +3,9 @@
 Per target-intacct pattern: client.py holds the API client for Oracle Fusion.
 - upload_zip, get_ess_job_status, poll_ess_job_status: Journal Import API (CSV mode)
 - OracleFusionSink: Hotglue sink for Singer mode
+
+Uses JWT auth (per Postman Journal Import collection):
+jwt_issuer, jwt_principal, jwt_private_key (or jwt_private_key_path)
 """
 
 from __future__ import annotations
@@ -38,13 +41,63 @@ def _normalize_base_url(url: str) -> str:
     return url.rstrip("/")
 
 
+def _build_jwt_token(config: dict) -> str:
+    """Build RS256 JWT for Oracle Fusion API (per Postman collection)."""
+    try:
+        import jwt
+    except ImportError as e:
+        raise UploadError(
+            "JWT auth requires PyJWT[crypto]. Install with: pip install 'PyJWT[crypto]'"
+        ) from e
+
+    issuer = config.get("jwt_issuer") or config.get("jwt_iss")
+    principal = config.get("jwt_principal") or config.get("jwt_prn")
+    private_key = config.get("jwt_private_key")
+    key_path = config.get("jwt_private_key_path")
+    x5t = config.get("jwt_x5t")
+
+    if not issuer or not principal:
+        raise UploadError("JWT auth requires jwt_issuer and jwt_principal in config")
+
+    if not private_key and not key_path:
+        raise UploadError("JWT auth requires jwt_private_key or jwt_private_key_path in config")
+
+    # Prefer jwt_private_key (string from Hotglue secret) over file path
+    if not private_key and key_path:
+        with open(Path(key_path).expanduser(), "r") as f:
+            private_key = f.read()
+
+    payload = {
+        "iss": issuer,
+        "prn": principal,
+        "iat": int(time.time()) - 60,
+        "exp": int(time.time()) + 3600,
+    }
+    headers = {"alg": "RS256", "typ": "JWT"}
+    if x5t:
+        headers["x5t"] = x5t
+
+    return jwt.encode(
+        payload,
+        private_key,
+        algorithm="RS256",
+        headers=headers,
+    )
+
+
+def _get_auth_headers(config: dict) -> Dict[str, str]:
+    """Return headers with Authorization Bearer token for JWT auth."""
+    token = _build_jwt_token(config)
+    return {"Authorization": f"Bearer {token}"}
+
+
 def upload_zip(zip_path: Path, config: dict) -> str:
     """
     Upload zip file to Oracle Fusion via importBulkData.
 
     Args:
         zip_path: Path to the zip file.
-        config: Must include base_url, api_username, api_password.
+        config: Must include base_url, jwt_issuer, jwt_principal, jwt_private_key (or path).
                 Optional: document_account, parameter_list, job_name, file_name.
 
     Returns:
@@ -57,10 +110,7 @@ def upload_zip(zip_path: Path, config: dict) -> str:
     if not base_url:
         raise UploadError("Config missing base_url for Oracle Fusion API")
 
-    username = config.get("api_username") or config.get("username")
-    password = config.get("api_password") or config.get("password")
-    if not username or not password:
-        raise UploadError("Config missing api_username and api_password for Oracle Fusion API")
+    auth_headers = _get_auth_headers(config)
 
     file_name = config.get("file_name") or zip_path.name
     document_account = config.get("document_account", DEFAULT_DOCUMENT_ACCOUNT)
@@ -85,12 +135,11 @@ def upload_zip(zip_path: Path, config: dict) -> str:
     }
 
     url = f"{base_url}{ERP_INTEGRATIONS_PATH}"
-    auth = (username, password)
-    headers = {"Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json", **auth_headers}
 
     logger.info("Uploading %s to Oracle Fusion (%s)", zip_path.name, base_url)
     try:
-        resp = requests.post(url, json=payload, auth=auth, headers=headers, timeout=120)
+        resp = requests.post(url, json=payload, headers=headers, timeout=120)
         resp.raise_for_status()
     except requests.RequestException as e:
         msg = f"Oracle Fusion upload failed: {e}"
@@ -117,8 +166,7 @@ def upload_zip(zip_path: Path, config: dict) -> str:
 def get_ess_job_status(
     base_url: str,
     request_id: str,
-    username: str,
-    password: str,
+    config: dict,
 ) -> str:
     """
     Get ESS job execution status for a given request ID.
@@ -126,8 +174,7 @@ def get_ess_job_status(
     Args:
         base_url: Oracle Fusion base URL (no trailing slash).
         request_id: ReqstId from upload response.
-        username: API username.
-        password: API password.
+        config: Config dict for JWT auth.
 
     Returns:
         Status string: SUCCEEDED, FAILED, RUNNING, or similar.
@@ -138,10 +185,10 @@ def get_ess_job_status(
     base_url = _normalize_base_url(base_url)
     url = f"{base_url}{ERP_INTEGRATIONS_PATH}"
     params = {"finder": f"ESSExecutionDetailsRF;requestId={request_id}"}
-    auth = (username, password)
+    headers = _get_auth_headers(config)
 
     try:
-        resp = requests.get(url, params=params, auth=auth, timeout=60)
+        resp = requests.get(url, params=params, headers=headers, timeout=60)
         resp.raise_for_status()
     except requests.RequestException as e:
         raise UploadError(f"ESS job status check failed: {e}", response=e) from e
@@ -169,8 +216,7 @@ def get_ess_job_status(
 def poll_ess_job_status(
     base_url: str,
     request_id: str,
-    username: str,
-    password: str,
+    config: dict,
     *,
     poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS,
     max_wait_seconds: int | None = None,
@@ -181,8 +227,7 @@ def poll_ess_job_status(
     Args:
         base_url: Oracle Fusion base URL.
         request_id: ReqstId from upload.
-        username: API username.
-        password: API password.
+        config: Config dict for JWT auth.
         poll_interval_seconds: Seconds between status checks (default 300 = 5 min).
         max_wait_seconds: Optional max total wait; None = wait indefinitely.
 
@@ -192,15 +237,16 @@ def poll_ess_job_status(
     Raises:
         UploadError: If status is FAILED or max_wait exceeded.
     """
-    terminal_statuses = ("SUCCEEDED", "FAILED", "ERROR", "WARNING", "CANCELLED")
+    terminal_statuses = ("SUCCEEDED", "COMPLETED", "FAILED", "ERROR", "WARNING", "CANCELLED")
+    success_statuses = ("SUCCEEDED", "COMPLETED")
     start = time.monotonic()
 
     while True:
-        status = get_ess_job_status(base_url, request_id, username, password)
+        status = get_ess_job_status(base_url, request_id, config)
         logger.info("ESS job status: %s (ReqstId=%s)", status, request_id)
 
         if status in terminal_statuses:
-            if status == "SUCCEEDED":
+            if status in success_statuses:
                 return status
             raise UploadError(f"ESS job finished with status: {status}", response={"status": status})
 

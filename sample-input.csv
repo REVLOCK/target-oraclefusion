@@ -1,4 +1,4 @@
-Transaction Date,Journal Entry Id,Account Number,Account Name,Class,Customer Name,Description,Amount,Posting Type,Currency,Department,Location,Discord Channel,Tier
+Transaction Date,Journal Entry Id,Account Number,Account Name,Department,Location,Description,Amount,Posting Type,Currency,Class,Discord Channel,Customer Name,Tier
 2025-12-31,123125 UR_Recl USD 1 1771425740739,120015,Unbilled Receivable,,,202512 Unbilled Receivable Reclass,103900,Debit,USD,,CA,,
 2025-12-31,123125 UR_Recl USD 1 1771425740739,230010,ST Deferred Revenue (Manual),,,202512 Unbilled Receivable Reclass,103900,Credit,USD,,CA,,
 2025-12-31,123125 UR_Recl USD 1 1771425740739,120015,Unbilled Receivable,,,202512 Unbilled Receivable Reclass,183787.51,Debit,USD,1000,0000,,

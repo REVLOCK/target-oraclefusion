@@ -160,16 +160,13 @@ def _upload_to_oracle_fusion(zip_path: Path, config: dict) -> None:
     """Upload zip to Oracle Fusion and poll ESS job status until complete."""
     reqst_id = upload_zip(zip_path, config)
     base_url = config.get("base_url", "").rstrip("/")
-    username = config.get("api_username") or config.get("username")
-    password = config.get("api_password") or config.get("password")
     poll_interval = config.get("poll_interval_seconds", DEFAULT_POLL_INTERVAL_SECONDS)
     max_wait = config.get("max_wait_seconds")
 
     poll_ess_job_status(
         base_url,
         reqst_id,
-        username,
-        password,
+        config,
         poll_interval_seconds=poll_interval,
         max_wait_seconds=max_wait,
     )
@@ -189,7 +186,7 @@ def upload(
 
     Args:
         config: Config dict with input_path, output_path, etc.
-               For upload: base_url, api_username, api_password.
+               For upload: base_url, jwt_issuer, jwt_principal, jwt_private_key.
         zip_output: Whether to zip the output CSV (default True).
         include_header: If True, write column headers.
         fail_on_validation_error: If True, raise on first validation error.
@@ -211,11 +208,11 @@ def upload(
         zip_path = _zip_output(result.output_path)
         result.output_path.unlink()
         logger.info("Removed intermediate CSV: %s", result.output_path)
-        zip_path.unlink()
-        logger.info("Removed zip: %s", zip_path)
 
     if upload_to_oracle and zip_path and config.get("base_url"):
         _upload_to_oracle_fusion(zip_path, config)
+        zip_path.unlink()
+        logger.info("Removed zip after upload: %s", zip_path)
     elif upload_to_oracle and (not zip_path or not config.get("base_url")):
         if not config.get("base_url"):
             logger.warning("Skipping Oracle upload: base_url not in config.")

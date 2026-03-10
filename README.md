@@ -77,6 +77,13 @@ target-oracle-fusion --config config.json
 | `user_je_source_name` | Journal source name (default: Chargebee) |
 | `user_je_category_name` | Journal category (default: Manual) |
 | `ledger_name` | Ledger name (default: USA PL USD US GAAP) |
+| `base_url` | Oracle Fusion base URL (required for upload) |
+| `parameter_list` | ESS job parameters (default: `ledger_id1,ledger_id2,ledger_id3,ALL,N,N,N`) |
+
+**Authentication** (JWT): `jwt_issuer`, `jwt_principal`, plus one of:
+- `jwt_private_key` – PEM string (use in Hotglue dashboard: store the key as a secret and map to this config key)
+- `jwt_private_key_path` – path to PEM file (e.g. `./.secrets/oracle_private_key.pem` for local dev)
+- optional `jwt_x5t`
 
 ### Example config.json
 

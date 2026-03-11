@@ -11,5 +11,5 @@
   "poll_interval_seconds": 300,
   "jwt_issuer": "CBIntegrationApp",
   "jwt_principal": "Chargebee.Integration@your-domain.com",
-  "jwt_private_key_path": "./.secrets/oracle_private_key.pem"
+  "jwt_private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 }

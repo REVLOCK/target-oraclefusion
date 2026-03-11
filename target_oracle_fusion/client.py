@@ -53,19 +53,17 @@ def _build_jwt_token(config: dict) -> str:
     issuer = config.get("jwt_issuer") or config.get("jwt_iss")
     principal = config.get("jwt_principal") or config.get("jwt_prn")
     private_key = config.get("jwt_private_key")
-    key_path = config.get("jwt_private_key_path")
     x5t = config.get("jwt_x5t")
 
     if not issuer or not principal:
         raise UploadError("JWT auth requires jwt_issuer and jwt_principal in config")
 
-    if not private_key and not key_path:
-        raise UploadError("JWT auth requires jwt_private_key or jwt_private_key_path in config")
+    if not private_key:
+        raise UploadError("JWT auth requires jwt_private_key (PEM string in config)")
 
-    # Prefer jwt_private_key (string from Hotglue secret) over file path
-    if not private_key and key_path:
-        with open(Path(key_path).expanduser(), "r") as f:
-            private_key = f.read()
+    # Ensure PEM is str (config passes string)
+    if isinstance(private_key, bytes):
+        private_key = private_key.decode("utf-8")
 
     payload = {
         "iss": issuer,

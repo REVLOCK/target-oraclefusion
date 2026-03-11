@@ -20,7 +20,7 @@ plugins:
     # TODO: To configure using Meltano, declare settings and their types here:
     - name: jwt_issuer
     - name: jwt_principal
-    - name: jwt_private_key
+    - name: private_key
       kind: password
     - name: start_date
       value: '2010-01-01T00:00:00Z'

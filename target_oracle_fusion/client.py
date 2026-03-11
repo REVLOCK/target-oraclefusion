@@ -5,7 +5,7 @@ Per target-intacct pattern: client.py holds the API client for Oracle Fusion.
 - OracleFusionSink: Hotglue sink for Singer mode
 
 Uses JWT auth (per Postman Journal Import collection):
-jwt_issuer, jwt_principal, jwt_private_key (or jwt_private_key_path)
+jwt_issuer, jwt_principal, private_key
 """
 
 from __future__ import annotations
@@ -52,14 +52,14 @@ def _build_jwt_token(config: dict) -> str:
 
     issuer = config.get("jwt_issuer") or config.get("jwt_iss")
     principal = config.get("jwt_principal") or config.get("jwt_prn")
-    private_key = config.get("jwt_private_key")
+    private_key = config.get("private_key")
     x5t = config.get("jwt_x5t")
 
     if not issuer or not principal:
         raise UploadError("JWT auth requires jwt_issuer and jwt_principal in config")
 
     if not private_key:
-        raise UploadError("JWT auth requires jwt_private_key (PEM string in config)")
+        raise UploadError("JWT auth requires private_key (PEM string in config)")
 
     # Ensure PEM is str (config passes string)
     if isinstance(private_key, bytes):
@@ -95,7 +95,7 @@ def upload_zip(zip_path: Path, config: dict) -> str:
 
     Args:
         zip_path: Path to the zip file.
-        config: Must include base_url, jwt_issuer, jwt_principal, jwt_private_key (or path).
+        config: Must include base_url, jwt_issuer, jwt_principal, private_key.
                 Optional: document_account, parameter_list, job_name, file_name.
 
     Returns:

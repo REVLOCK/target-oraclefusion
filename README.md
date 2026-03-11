@@ -80,7 +80,7 @@ target-oracle-fusion --config config.json
 | `base_url` | Oracle Fusion base URL (required for upload) |
 | `parameter_list` | ESS job parameters (default: `ledger_id1,ledger_id2,ledger_id3,ALL,N,N,N`) |
 
-**Authentication** (JWT): `jwt_issuer`, `jwt_principal`, `jwt_private_key` (PEM string in config).
+**Authentication** (JWT): `jwt_issuer`, `jwt_principal`, `private_key` (PEM string in config).
 - optional `jwt_x5t`
 
 ### Example config.json

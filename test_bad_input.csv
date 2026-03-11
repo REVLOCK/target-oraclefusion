@@ -1,6 +1,0 @@
-Transaction Date,Journal Entry Id,Account Number,Account Name,Description,Amount,Posting Type,Currency
-2025-12-31,JE-001,120015,Unbilled Receivable,Valid row,100.50,Debit,USD
-2025-12-31,JE-002,,Missing Account,Invalid - no account,200,Credit,USD
-2025-12-31,JE-003,230010,Deferred Revenue,Bad posting type,150,Invalid,USD
-2025-12-31,JE-004,120015,Unbilled Receivable,Bad amount,abc,Debit,USD
-invalid-date,JE-005,230010,Deferred Revenue,Bad date format,50,Credit,USD

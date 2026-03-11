@@ -100,10 +100,8 @@ target-oracle-fusion --config config.json
 
 ### CLI options
 
-- `--input-path` - Override input path from config
-- `--output-path` - Override output path from config
-- `--no-zip` - Skip zipping the output CSV
-- `-v` - Verbose logging
+- `--config` / `-c` - Path to JSON config file (required)
+- `-v` / `--verbose` - Verbose logging
 
 ### Input CSV format
 

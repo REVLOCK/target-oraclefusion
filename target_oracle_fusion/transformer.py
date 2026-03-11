@@ -126,13 +126,8 @@ def _validate_row(row: dict[str, Any], row_num: int, je_id: str) -> tuple[list[s
 
 
 def _build_empty_oracle_row() -> dict[str, str]:
-    """Build Oracle GL row with all columns set to empty string (or default)."""
-    row = dict.fromkeys(ORACLE_OUTPUT_COLUMNS, "")
-    row["STATUS"] = "NEW"
-    row["ACTUAL_FLAG"] = "A"
-    row["SEGMENT7"] = row["SEGMENT8"] = "0"
-    row["CREATION_DATE"] = "END"
-    return row
+    """Build Oracle GL row with all columns set to empty string."""
+    return dict.fromkeys(ORACLE_OUTPUT_COLUMNS, "")
 
 
 def transform_row(
@@ -142,6 +137,12 @@ def transform_row(
 ) -> dict[str, str]:
     """Transform a single input row to Oracle Fusion output format."""
     out = _build_empty_oracle_row()
+
+    # Fixed Oracle defaults
+    out["STATUS"] = "NEW"
+    out["ACTUAL_FLAG"] = "A"
+    out["SEGMENT7"] = out["SEGMENT8"] = "0"
+    out["CREATION_DATE"] = "END"
 
     # Config-driven values
     out["LEDGER_ID"] = config.get("ledger_id", DEFAULT_LEDGER_ID)

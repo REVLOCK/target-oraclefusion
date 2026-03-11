@@ -7,6 +7,14 @@
 
 # Generated output
 output/
+*.zip
+target-state.json
+
+# Local/test data and config (keep config.sample.json)
+JournalEntries.csv
+config.json
+test_bad_input.csv
+sample-input.csv
 
 # Ignore meltano internal cache and sqlite systemdb
 

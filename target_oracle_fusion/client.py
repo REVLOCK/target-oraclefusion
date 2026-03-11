@@ -261,55 +261,5 @@ def poll_ess_job_status(
         time.sleep(poll_interval_seconds)
 
 
-# --- Hotglue sink (Singer mode) ---
-
-
-class JournalEntrySchema(BaseModel):
-    """Unified schema for Journal Entry records (optional validation)."""
-
-    class Config:
-        extra = "allow"
-
-
-class OracleFusionSink(HotglueSink):
-    """Base sink for Oracle Fusion - extends HotglueSink (per record).
-
-    Per Hotglue docs: preprocess_record builds payload, upsert_record sends to API.
-    """
-
-    auto_validate_unified_schema = False  # Skip strict schema validation
-
-    @property
-    def base_url(self) -> str:
-        return self._config.get("base_url", "https://api.oracle-fusion.example.com")
-
-    @property
-    def endpoint(self) -> str:
-        return self._config.get("endpoint", "/journal-entries")
-
-    @property
-    def unified_schema(self) -> type[BaseModel]:
-        return JournalEntrySchema
-
-    def preprocess_record(self, record: dict, context: dict) -> dict:
-        """Transform record to API payload format. Override in sinks."""
-        return record
-
-    def upsert_record(self, record: dict, context: dict) -> tuple[Any, bool, dict]:
-        """Send record to API. Override in sinks for custom logic."""
-        response = self.request_api("POST", request_data=record)
-        record_id = response.json().get("id") if response.content else None
-        return record_id, response.ok, {}
-
-    @property
-    def authenticator(self) -> None:
-        """No OAuth authenticator; use static Bearer token via http_headers."""
-        return None
-
-    @property
-    def http_headers(self) -> Dict[str, Any]:
-        """Add Bearer token when access_token is in config."""
-        headers = dict(getattr(super(), "http_headers", {}))
-        if self._config.get("access_token"):
-            headers["Authorization"] = f"Bearer {self._config.get('access_token')}"
-        return headers
+# OracleFusionSink moved to sink.py to avoid importing target_hotglue
+# (numpy/joblib segfault on macOS). Import from target_oracle_fusion.sink when needed.

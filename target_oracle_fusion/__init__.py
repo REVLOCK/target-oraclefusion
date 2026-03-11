@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import time
 import zipfile
 from pathlib import Path
 
@@ -16,8 +17,10 @@ import singer
 
 from target_oracle_fusion.const import (
     DEFAULT_POLL_INTERVAL_SECONDS,
+    INPUT_FILENAME,
     OUTPUT_FILENAME,
     REQUIRED_CONFIG_KEYS,
+    ZIP_FILENAME_PREFIX,
 )
 from target_oracle_fusion.exceptions import ConfigError, OutputError, UploadError
 from target_oracle_fusion.client import poll_ess_job_status, upload_zip
@@ -27,7 +30,7 @@ logger = singer.get_logger()
 
 
 def _parse_args() -> argparse.Namespace:
-    """Parse command-line arguments (similar to singer.utils.parse_args)."""
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Transform RevRec journal entries CSV to Oracle Fusion format and zip."
     )
@@ -38,38 +41,10 @@ def _parse_args() -> argparse.Namespace:
         help="Path to JSON config file",
     )
     parser.add_argument(
-        "--input-path",
-        help="Override input path from config",
-    )
-    parser.add_argument(
-        "--output-path",
-        help="Override output path from config",
-    )
-    parser.add_argument(
-        "--no-zip",
-        action="store_true",
-        help="Skip zipping the output CSV",
-    )
-    parser.add_argument(
-        "--header",
-        action="store_true",
-        help="Include column headers in output CSV (default: no headers)",
-    )
-    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
         help="Enable verbose logging",
-    )
-    parser.add_argument(
-        "--continue-on-error",
-        action="store_true",
-        help="Continue processing on validation errors (skip invalid rows, write target-state.json)",
-    )
-    parser.add_argument(
-        "--no-upload",
-        action="store_true",
-        help="Skip uploading zip to Oracle Fusion (only transform and zip locally)",
     )
     return parser.parse_args()
 
@@ -87,9 +62,11 @@ def _load_config(config_path: str) -> dict:
 
 
 def _zip_output(csv_path: Path, zip_path: Path | None = None) -> Path:
-    """Zip the output CSV file."""
+    """Zip the output CSV file. Name: Glinterface_chargebee_<unique_id>.zip"""
     if zip_path is None:
-        zip_path = csv_path.with_suffix(".zip")
+        unique_id = int(time.time() * 1000)
+        zip_name = f"{ZIP_FILENAME_PREFIX}_{unique_id}.zip"
+        zip_path = csv_path.parent / zip_name
     try:
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.write(csv_path, arcname=csv_path.name)
@@ -130,7 +107,7 @@ def load_journal_entries(
     Returns:
         TransformResult with success/fail counts and error details.
     """
-    input_path = Path(config["input_path"])
+    input_path = Path(config["input_path"]) / INPUT_FILENAME
     output_path = Path(config["output_path"])
 
     if output_path.suffix.lower() == ".csv":
@@ -173,24 +150,12 @@ def _upload_to_oracle_fusion(zip_path: Path, config: dict) -> None:
     logger.info("Oracle Fusion ESS job completed successfully.")
 
 
-def upload(
-    config: dict,
-    *,
-    zip_output: bool = True,
-    include_header: bool = False,
-    fail_on_validation_error: bool = True,
-    upload_to_oracle: bool = True,
-) -> TransformResult:
+def upload(config: dict) -> TransformResult:
     """
-    Transform input CSV to Oracle Fusion format, zip, and optionally upload to Oracle.
+    Transform input CSV to Oracle Fusion format, zip, and upload to Oracle.
 
     Args:
-        config: Config dict with input_path, output_path, etc.
-               For upload: base_url, jwt_issuer, jwt_principal, jwt_private_key.
-        zip_output: Whether to zip the output CSV (default True).
-        include_header: If True, write column headers.
-        fail_on_validation_error: If True, raise on first validation error.
-        upload_to_oracle: If True, upload zip to Oracle Fusion and poll ESS job (default True).
+        config: Config dict with input_path, output_path, base_url, jwt_*, etc.
 
     Returns:
         TransformResult with success/fail counts.
@@ -199,25 +164,20 @@ def upload(
 
     result = load_journal_entries(
         config,
-        include_header=include_header,
-        fail_on_validation_error=fail_on_validation_error,
+        include_header=False,
+        fail_on_validation_error=True,
     )
 
-    zip_path: Path | None = None
-    if zip_output:
-        zip_path = _zip_output(result.output_path)
-        result.output_path.unlink()
-        logger.info("Removed intermediate CSV: %s", result.output_path)
+    zip_path = _zip_output(result.output_path)
+    result.output_path.unlink()
+    logger.info("Removed intermediate CSV: %s", result.output_path)
 
-    if upload_to_oracle and zip_path and config.get("base_url"):
+    if config.get("base_url"):
         _upload_to_oracle_fusion(zip_path, config)
         zip_path.unlink()
         logger.info("Removed zip after upload: %s", zip_path)
-    elif upload_to_oracle and (not zip_path or not config.get("base_url")):
-        if not config.get("base_url"):
-            logger.warning("Skipping Oracle upload: base_url not in config.")
-        else:
-            logger.warning("Skipping Oracle upload: no zip created (--no-zip).")
+    else:
+        logger.warning("Skipping Oracle upload: base_url not in config.")
 
     if result.fail_count > 0:
         logger.warning("Upload completed with %d failed rows. See target-state.json for details.", result.fail_count)
@@ -241,22 +201,11 @@ def main() -> None:
 
     config = _load_config(args.config)
 
-    if args.input_path:
-        config["input_path"] = args.input_path
-    if args.output_path:
-        config["output_path"] = args.output_path
-
     missing = [k for k in REQUIRED_CONFIG_KEYS if not config.get(k)]
     if missing:
         raise ConfigError(f"Config missing required keys: {missing}")
 
-    upload(
-        config,
-        zip_output=not args.no_zip,
-        include_header=args.header,
-        fail_on_validation_error=not args.continue_on_error,
-        upload_to_oracle=not args.no_upload,
-    )
+    upload(config)
 
 
 if __name__ == "__main__":

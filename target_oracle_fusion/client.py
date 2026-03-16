@@ -41,6 +41,18 @@ def _normalize_base_url(url: str) -> str:
     return url.rstrip("/")
 
 
+def _normalize_pem_key(pem: str) -> str:
+    """Normalize PEM key: replace spaces with newlines for config-stored keys.
+
+    PEM format requires newlines between header, base64 lines, and footer.
+    When stored in JSON/config, newlines often become spaces. This restores
+    valid PEM format so the key can be deserialized.
+    """
+    if not pem:
+        return pem
+    return pem.replace(" ", "\n")
+
+
 def _build_jwt_token(config: dict) -> str:
     """Build RS256 JWT for Oracle Fusion API (per Postman collection)."""
     try:
@@ -64,6 +76,9 @@ def _build_jwt_token(config: dict) -> str:
     # Ensure PEM is str (config passes string)
     if isinstance(private_key, bytes):
         private_key = private_key.decode("utf-8")
+
+    # Normalize PEM: config-stored keys often have spaces instead of newlines
+    private_key = _normalize_pem_key(private_key)
 
     payload = {
         "iss": issuer,

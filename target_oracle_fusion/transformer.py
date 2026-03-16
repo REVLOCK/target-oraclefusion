@@ -52,7 +52,7 @@ class TransformResult:
 
 
 def _format_accounting_date(value: Any) -> str:
-    """Convert Transaction Date (YYYY-MM-DD) to Oracle format DD/MM/YY."""
+    """Convert Transaction Date to Oracle format YYYY-MM-DD."""
     if value is None or value == "":
         return ""
     s = str(value).strip()
@@ -60,7 +60,7 @@ def _format_accounting_date(value: Any) -> str:
         return ""
     try:
         dt = datetime.strptime(s, "%Y-%m-%d")
-        return dt.strftime("%d/%m/%y")
+        return dt.strftime("%Y-%m-%d")
     except (ValueError, TypeError):
         return s
 
@@ -165,10 +165,12 @@ def transform_row(
     out["ACCOUNTING_DATE"] = _format_accounting_date(row.get("Transaction Date"))
     out["CURRENCY_CODE"] = _safe_str(row.get("Currency", "USD"))
     out["DATE_CREATED"] = _format_date_created()
+    out["SEGMENT1"] = "110"
     out["SEGMENT2"] = _safe_str(row.get("Location", ""), "0")
     out["SEGMENT3"] = _safe_str(row.get("Department", ""), "0")
     out["SEGMENT4"] = _safe_str(row.get("Account Number", ""))
     out["SEGMENT5"] = _safe_str(row.get("Discord Channel", ""), "0")
+    out["SEGMENT6"] = "000"
     out["REFERENCE1"] = out["REFERENCE2"] = out["REFERENCE3"] = out["REFERENCE4"] = out["REFERENCE5"] = description
     out["GROUP_ID"] = group_id
 

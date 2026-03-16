@@ -173,9 +173,11 @@ def upload(config: dict) -> TransformResult:
     logger.info("Removed intermediate CSV: %s", result.output_path)
 
     if config.get("base_url"):
-        _upload_to_oracle_fusion(zip_path, config)
-        zip_path.unlink()
-        logger.info("Removed zip after upload: %s", zip_path)
+        try:
+            _upload_to_oracle_fusion(zip_path, config)
+        finally:
+            zip_path.unlink()
+            logger.info("Removed zip after upload: %s", zip_path)
     else:
         logger.warning("Skipping Oracle upload: base_url not in config.")
 

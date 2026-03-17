@@ -18,9 +18,6 @@ from pathlib import Path
 from typing import Any, Dict
 
 import requests
-from pydantic import BaseModel
-
-from target_hotglue.client import HotglueSink
 
 from target_oracle_fusion.const import (
     DEFAULT_DOCUMENT_ACCOUNT,
@@ -47,7 +44,7 @@ def _normalize_pem_key(pem: str) -> str:
     PEM format requires newlines between header, base64 lines, and footer.
     Config systems often mangle this:
     - Literal \\n (backslash-n) instead of real newlines
-    - Spaces instead of newlines
+    - Spaces instead of newlines (header/footer contain spaces: "BEGIN PRIVATE KEY")
     - Leading/trailing whitespace
     """
     if not pem:
@@ -55,33 +52,26 @@ def _normalize_pem_key(pem: str) -> str:
     pem = pem.strip()
     # Replace literal \n (backslash + n) with real newline - common in serialized config
     pem = pem.replace("\\n", "\n")
-    # Replace spaces with newlines - for space-separated format
-    pem = pem.replace(" ", "\n")
+    # For space-separated format: only replace spaces in the base64 content, not in header/footer
+    if " " in pem and "\n" not in pem:
+        tokens = pem.split()
+        # Find header end: "-----BEGIN", "PRIVATE", "KEY-----"
+        i = 0
+        while i < len(tokens) and not tokens[i].endswith("KEY-----"):
+            i += 1
+        if i >= len(tokens):
+            return pem
+        header = " ".join(tokens[: i + 1])
+        # Find footer start: "-----END", "PRIVATE", "KEY-----"
+        j = i + 1
+        while j < len(tokens) and tokens[j] != "-----END":
+            j += 1
+        if j >= len(tokens):
+            return pem
+        base64_tokens = tokens[i + 1 : j]
+        footer = " ".join(tokens[j:])
+        pem = header + "\n" + "\n".join(base64_tokens) + "\n" + footer
     return pem
-
-
-def _debug_pem_format(pem: str, stage: str) -> None:
-    """Log PEM format hints for debugging (no key material)."""
-    if not pem:
-        logger.debug("PEM %s: empty", stage)
-        return
-    has_newline = "\n" in pem
-    has_literal_backslash_n = "\\n" in pem
-    has_spaces = " " in pem
-    starts_begin = pem.strip().startswith("-----BEGIN")
-    ends_end = "-----END" in pem
-    logger.debug(
-        "PEM %s: len=%d, has_newline=%s, has_literal_backslash_n=%s, has_spaces=%s, "
-        "starts_begin=%s, ends_end=%s, first50=%r",
-        stage,
-        len(pem),
-        has_newline,
-        has_literal_backslash_n,
-        has_spaces,
-        starts_begin,
-        ends_end,
-        pem[:50],
-    )
 
 
 def _build_jwt_token(config: dict) -> str:
@@ -108,12 +98,8 @@ def _build_jwt_token(config: dict) -> str:
     if isinstance(private_key, bytes):
         private_key = private_key.decode("utf-8")
 
-    _debug_pem_format(private_key, "before_normalize")
-
     # Normalize PEM: config-stored keys often have spaces instead of newlines
     private_key = _normalize_pem_key(private_key)
-
-    _debug_pem_format(private_key, "after_normalize")
 
     payload = {
         "iss": issuer,

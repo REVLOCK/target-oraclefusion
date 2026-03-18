@@ -190,7 +190,6 @@ def upload(config: dict) -> TransformResult:
     return result
 
 
-@singer.utils.handle_top_exception(logger)
 def main() -> None:
     """
     Main entry point. Parses config and runs upload.
@@ -202,10 +201,10 @@ def main() -> None:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    # TODO: Remove - testing error handling (prints only the message to stderr, no traceback)
-    msg = "EFO4: The account provided is invalid. Please verify the cross-validation rules and segment values. (Reference ID: 404207)"
-    print(msg, file=sys.stderr)
-    sys.exit(1)
+    # TODO: Remove - testing error handling
+    raise UploadError(
+        "EFO4: The account provided is invalid. Please verify the cross-validation rules and segment values. (Reference ID: 404207)"
+    )
 
     config = _load_config(args.config)
 

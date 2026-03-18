@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import logging
 import time
 import zipfile
@@ -194,17 +195,17 @@ def main() -> None:
     """
     Main entry point. Parses config and runs upload.
     """
-    # TODO: Remove - testing error handling
-    raise UploadError(
-        "EFO4: The account provided is invalid. Please verify the cross-validation rules and segment values. (Reference ID: 404207)"
-    )
-
     args = _parse_args()
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
+
+    # TODO: Remove - testing error handling (prints only the message to stderr, no traceback)
+    msg = "EFO4: The account provided is invalid. Please verify the cross-validation rules and segment values. (Reference ID: 404207)"
+    print(msg, file=sys.stderr)
+    sys.exit(1)
 
     config = _load_config(args.config)
 

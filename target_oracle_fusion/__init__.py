@@ -194,6 +194,11 @@ def main() -> None:
     """
     Main entry point. Parses config and runs upload.
     """
+    # TODO: Remove - testing error handling
+    raise UploadError(
+        "EFO4: The account provided is invalid. Please verify the cross-validation rules and segment values. (Reference ID: 404207)"
+    )
+
     args = _parse_args()
 
     logging.basicConfig(

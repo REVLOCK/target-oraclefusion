@@ -204,7 +204,7 @@ def main() -> None:
 
     # TODO: Remove - testing error handling
     raise UploadError(
-        "EFO4: The account provided is invalid. Please verify the cross-validation rules and segment values. (Reference ID: 404207)"
+        "EP1001: The account provided is invalid. Please verify the xyz and segment values. (Reference ID: 404207100)"
     )
 
     config = _load_config(args.config)

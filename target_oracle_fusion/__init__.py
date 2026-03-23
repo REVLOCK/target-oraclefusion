@@ -190,6 +190,7 @@ def upload(config: dict) -> TransformResult:
     return result
 
 
+@singer.utils.handle_top_exception(logger)
 def main() -> None:
     """
     Main entry point. Parses config and runs upload.

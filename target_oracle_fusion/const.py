@@ -175,8 +175,21 @@ DEFAULT_USER_JE_SOURCE_NAME = "Chargebee"
 DEFAULT_USER_JE_CATEGORY_NAME = "Manual"
 DEFAULT_LEDGER_NAME = "USA PL USD US GAAP"
 
-# Oracle Fusion API (Journal Import)
+# Oracle Fusion API
+ERP_INTEGRATIONS_PATH = "/fscmRestApi/resources/11.13.18.05/erpintegrations"
+
+# Journal Import
 DEFAULT_DOCUMENT_ACCOUNT = "fin$/generalLedger$/import$"
 DEFAULT_JOB_NAME = "/oracle/apps/ess/financials/generalLedger/programs/common,JournalImportLauncher"
 DEFAULT_PARAMETER_LIST = "300000003863062,300000081590170,300000003864052,ALL,N,N,N"
 DEFAULT_POLL_INTERVAL_SECONDS = 300  # 5 minutes
+
+# ESS Job Status SOAP Report
+ESS_REPORT_SOAP_PATH = "/xmlpserver/services/ExternalReportWSSService"
+DEFAULT_ESS_JOB_REPORT_PATH = "/Custom/Financials/XXDISCORD/XXDIS_ESSJobDetails_Report.xdo"
+ESS_MIN_ROWS_FOR_ERROR_LOG = 6
+ESS_SIXTH_ROW_INDEX = 5  # 0-based index for 6th row
+
+# ESS job status values
+ESS_STATUS_FAILURE = ("ERROR", "FAILED", "CANCELLED", "WARNING")
+ESS_STATUS_SUCCESS = ("SUCCEEDED", "SUCCEEDED_WITH_WARNINGS", "COMPLETED")

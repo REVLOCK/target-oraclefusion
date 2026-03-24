@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import csv
 import logging
+import os
+import tempfile
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -225,57 +227,81 @@ def transform_csv(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    fd, tmp_name = tempfile.mkstemp(
+        suffix=".csv",
+        prefix=".glinterface_",
+        dir=str(output_path.parent),
+    )
+    os.close(fd)
+    tmp_path = Path(tmp_name)
+    wrote_output = False
     group_ids: dict[str, str] = {}
     result = TransformResult(output_path=output_path)
 
-    with open(output_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=ORACLE_OUTPUT_COLUMNS)
-        if include_header:
-            writer.writeheader()
+    try:
+        with open(tmp_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=ORACLE_OUTPUT_COLUMNS)
+            if include_header:
+                writer.writeheader()
 
-        for row_num, row in enumerate(rows, start=2):
-            je_id = _safe_str(row.get("Journal Entry Id", ""))
-            errors, warnings = _validate_row(row, row_num, je_id)
+            for row_num, row in enumerate(rows, start=2):
+                je_id = _safe_str(row.get("Journal Entry Id", ""))
+                errors, warnings = _validate_row(row, row_num, je_id)
 
-            for w in warnings:
-                result.warnings.append({"row": row_num, "journal_entry_id": je_id, "message": w})
-                logger.warning(w)
+                for w in warnings:
+                    result.warnings.append({"row": row_num, "journal_entry_id": je_id, "message": w})
+                    logger.warning(w)
 
-            if errors:
-                for e in errors:
-                    result.errors.append({"row": row_num, "journal_entry_id": je_id, "message": e})
-                    logger.error(e)
-                result.fail_count += 1
-                if fail_on_validation_error:
-                    raise ValidationError(
-                        f"Validation failed at row {row_num}: {errors[0]}",
-                        response={"errors": result.errors, "warnings": result.warnings},
-                    )
-                continue
+                if errors:
+                    for e in errors:
+                        result.errors.append({"row": row_num, "journal_entry_id": je_id, "message": e})
+                        logger.error(e)
+                    result.fail_count += 1
+                    if fail_on_validation_error:
+                        raise ValidationError(
+                            f"Validation failed at row {row_num}: {errors[0]}",
+                            response={"errors": result.errors, "warnings": result.warnings},
+                        )
+                    continue
 
-            if je_id not in group_ids:
-                group_ids[je_id] = _generate_group_id()
+                if je_id not in group_ids:
+                    group_ids[je_id] = _generate_group_id()
 
+                try:
+                    out_row = transform_row(row, config, group_ids[je_id])
+                    writer.writerow(out_row)
+                    result.success_count += 1
+                except Exception as e:
+                    result.fail_count += 1
+                    err_msg = f"Row {row_num}: Transform failed - {e}"
+                    result.errors.append({"row": row_num, "journal_entry_id": je_id, "message": err_msg})
+                    logger.exception(err_msg)
+                    if fail_on_validation_error:
+                        raise TransformError(err_msg, response=e) from e
+
+        try:
+            if output_path.exists():
+                output_path.unlink()
+        except OSError as e:
+            logger.warning("Could not remove prior output file %s: %s", output_path, e)
+        os.replace(str(tmp_path), str(output_path))
+        wrote_output = True
+
+        logger.info(
+            "Transformed %d rows from %s to %s (success=%d, fail=%d, warnings=%d)",
+            len(rows),
+            input_file,
+            output_path,
+            result.success_count,
+            result.fail_count,
+            result.warning_count,
+        )
+        result.warning_count = len(result.warnings)
+        return result
+    finally:
+        if not wrote_output and tmp_path.exists():
             try:
-                out_row = transform_row(row, config, group_ids[je_id])
-                writer.writerow(out_row)
-                result.success_count += 1
-            except Exception as e:
-                result.fail_count += 1
-                err_msg = f"Row {row_num}: Transform failed - {e}"
-                result.errors.append({"row": row_num, "journal_entry_id": je_id, "message": err_msg})
-                logger.exception(err_msg)
-                if fail_on_validation_error:
-                    raise TransformError(err_msg, response=e) from e
-
-    logger.info(
-        "Transformed %d rows from %s to %s (success=%d, fail=%d, warnings=%d)",
-        len(rows),
-        input_file,
-        output_path,
-        result.success_count,
-        result.fail_count,
-        result.warning_count,
-    )
-    result.warning_count = len(result.warnings)
-    return result
+                tmp_path.unlink()
+                logger.debug("Removed incomplete temp transform file: %s", tmp_path)
+            except OSError as e:
+                logger.warning("Could not remove temp transform file %s: %s", tmp_path, e)

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import logging
 import time
 import zipfile
@@ -50,6 +49,17 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _safe_unlink(path: Path, *, label: str = "file") -> None:
+    """Remove a file if it exists; log failures without raising."""
+    try:
+        path.unlink()
+        logger.info("Removed %s: %s", label, path)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.warning("Could not remove %s %s: %s", label, path, e)
+
+
 def _load_config(config_path: str) -> dict:
     """Load config from JSON file."""
     path = Path(config_path)
@@ -74,6 +84,7 @@ def _zip_output(csv_path: Path, zip_path: Path | None = None) -> Path:
         logger.info("Created zip file: %s", zip_path)
         return zip_path
     except (OSError, zipfile.BadZipFile) as e:
+        _safe_unlink(zip_path, label="partial zip")
         logger.exception("Failed to create zip file: %s", zip_path)
         raise OutputError(f"Failed to create zip: {e}") from e
 
@@ -163,31 +174,47 @@ def upload(config: dict) -> TransformResult:
     """
     logger.info("Starting upload.")
 
-    result = load_journal_entries(
-        config,
-        include_header=False,
-        fail_on_validation_error=True,
-    )
+    zip_path: Path | None = None
+    success = False
+    try:
+        result = load_journal_entries(
+            config,
+            include_header=False,
+            fail_on_validation_error=True,
+        )
 
-    zip_path = _zip_output(result.output_path)
-    result.output_path.unlink()
-    logger.info("Removed intermediate CSV: %s", result.output_path)
+        zip_path = _zip_output(result.output_path)
+        _safe_unlink(result.output_path, label="intermediate CSV")
 
-    if config.get("base_url"):
-        try:
+        if config.get("base_url"):
             _upload_to_oracle_fusion(zip_path, config)
-        finally:
-            zip_path.unlink()
-            logger.info("Removed zip after upload: %s", zip_path)
-    else:
-        logger.warning("Skipping Oracle upload: base_url not in config.")
+        else:
+            logger.warning("Skipping Oracle upload: base_url not in config.")
 
-    if result.fail_count > 0:
-        logger.warning("Upload completed with %d failed rows. See target-state.json for details.", result.fail_count)
-    else:
-        logger.info("Upload completed successfully (%d rows).", result.success_count)
+        success = True
 
-    return result
+        if result.fail_count > 0:
+            logger.warning(
+                "Upload completed with %d failed rows. See target-state.json for details.",
+                result.fail_count,
+            )
+        else:
+            logger.info("Upload completed successfully (%d rows).", result.success_count)
+
+        return result
+    except Exception:
+        logger.exception("Upload failed; cleaning up generated artifacts where possible.")
+        raise
+    finally:
+        if zip_path is not None:
+            remove_zip = bool(config.get("base_url")) or not success
+            if remove_zip:
+                _safe_unlink(zip_path, label="zip")
+            elif success:
+                logger.info(
+                    "Leaving zip at %s (no base_url configured; use for manual upload).",
+                    zip_path,
+                )
 
 
 @singer.utils.handle_top_exception(logger)
@@ -200,11 +227,6 @@ def main() -> None:
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-
-    # TODO: Remove - testing error handling
-    raise UploadError(
-        "EP1001: The account provided is invalid. Please verify the xyz and segment values. (Reference ID: 404207100)"
     )
 
     config = _load_config(args.config)

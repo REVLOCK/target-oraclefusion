@@ -1,51 +1,33 @@
-"""Target for Oracle Fusion.
-
-Transforms RevRec journal entries CSV to Oracle Fusion GL format and zips output.
-"""
+"""Oracle Fusion target: CSV → GL format, zip, optional REST upload and ESS polling."""
 
 from __future__ import annotations
 
-import argparse
 import json
 import logging
+import shutil
 import time
 import zipfile
 from pathlib import Path
+from typing import Any, Dict
 
 import singer
 
 from target_oracle_fusion.const import (
+    DEFAULT_MAX_WAIT_SECONDS,
+    DEFAULT_OUTPUT_PATH,
     DEFAULT_POLL_INTERVAL_SECONDS,
     INPUT_FILENAME,
     OUTPUT_FILENAME,
     REQUIRED_CONFIG_KEYS,
+    REQUIRED_FLATTENED_CONFIG_KEYS,
     ZIP_FILENAME_PREFIX,
 )
+from target_oracle_fusion import auth
 from target_oracle_fusion.exceptions import ConfigError, OutputError, UploadError
 from target_oracle_fusion.client import poll_ess_job_status, upload_zip
 from target_oracle_fusion.transformer import transform_csv, TransformResult
 
 logger = singer.get_logger()
-
-
-def _parse_args() -> argparse.Namespace:
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Transform RevRec journal entries CSV to Oracle Fusion format and zip."
-    )
-    parser.add_argument(
-        "--config",
-        "-c",
-        required=True,
-        help="Path to JSON config file",
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Enable verbose logging",
-    )
-    return parser.parse_args()
 
 
 def _safe_unlink(path: Path, *, label: str = "file") -> None:
@@ -59,16 +41,64 @@ def _safe_unlink(path: Path, *, label: str = "file") -> None:
         logger.warning("Could not remove %s %s: %s", label, path, e)
 
 
-def _load_config(config_path: str) -> dict:
-    """Load config from JSON file."""
-    path = Path(config_path)
-    if not path.exists():
-        raise ConfigError(f"Config file not found: {config_path}")
-    try:
-        with open(path, encoding="utf-8") as f:
-            return json.load(f)
-    except json.JSONDecodeError as e:
-        raise ConfigError(f"Invalid JSON in config: {e}") from e
+def _empty_output_workspace() -> None:
+    """Remove all contents of ``DEFAULT_OUTPUT_PATH``; keep the directory."""
+    root = Path(DEFAULT_OUTPUT_PATH)
+    if not root.is_dir():
+        return
+    children = list(root.iterdir())
+    if not children:
+        return
+    for child in children:
+        try:
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+        except OSError as e:
+            logger.warning("Could not remove workspace path %s: %s", child, e)
+    logger.info("Cleaned workspace directory: %s", root.resolve())
+
+
+def flatten_config(config: Any) -> Dict[str, Any]:
+    """Merge ``custom_fields`` name/value pairs, then top-level keys (top-level wins)."""
+    if not isinstance(config, dict):
+        raise ConfigError("config must be a JSON object")
+
+    out: Dict[str, Any] = {}
+
+    custom = config.get("custom_fields")
+    if isinstance(custom, list):
+        for item in custom:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            if name is None or name == "":
+                continue
+            out[str(name)] = item.get("value")
+
+    for key, value in config.items():
+        if key == "custom_fields":
+            continue
+        out[key] = value
+
+    return out
+
+
+def require_flattened_config(config: dict) -> None:
+    """Raise ``ConfigError`` if any required key is missing or empty after ``flatten_config``."""
+    missing: list[str] = []
+    for key in REQUIRED_FLATTENED_CONFIG_KEYS:
+        val = config.get(key)
+        if val is None:
+            missing.append(key)
+        elif isinstance(val, str) and not val.strip():
+            missing.append(key)
+    if missing:
+        raise ConfigError(
+            "Missing or empty required config (after custom_fields merge): "
+            + ", ".join(sorted(missing))
+        )
 
 
 def _zip_output(csv_path: Path, zip_path: Path | None = None) -> Path:
@@ -107,28 +137,10 @@ def load_journal_entries(
     include_header: bool = False,
     fail_on_validation_error: bool = True,
 ) -> TransformResult:
-    """
-    Load journal entries from input CSV, transform to Oracle Fusion format, write output.
-
-    Args:
-        config: Config dict with input_path, output_path, ledger_id, etc.
-        include_header: If True, write column headers. Default False (data rows only).
-        fail_on_validation_error: If True, raise on first validation error. Default True.
-
-    Returns:
-        TransformResult with success/fail counts and error details.
-    """
     input_path = Path(config["input_path"]) / INPUT_FILENAME
-    output_path = Path(config["output_path"])
-
-    if output_path.suffix.lower() == ".csv":
-        output_csv = output_path
-        output_dir = output_path.parent
-        output_dir.mkdir(parents=True, exist_ok=True)
-    else:
-        output_path.mkdir(parents=True, exist_ok=True)
-        output_csv = output_path / f"{OUTPUT_FILENAME}.csv"
-        output_dir = output_path
+    output_dir = Path(DEFAULT_OUTPUT_PATH)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_csv = output_dir / f"{OUTPUT_FILENAME}.csv"
 
     result = transform_csv(
         input_path,
@@ -147,34 +159,27 @@ def load_journal_entries(
 def _upload_to_oracle_fusion(zip_path: Path, config: dict) -> None:
     """Upload zip to Oracle Fusion and poll ESS job status until complete."""
     reqst_id = upload_zip(zip_path, config)
-    base_url = config.get("base_url", "").rstrip("/")
-    poll_interval = config.get("poll_interval_seconds", DEFAULT_POLL_INTERVAL_SECONDS)
-    max_wait = config.get("max_wait_seconds")
+    base_url = auth.normalize_base_url(config.get("base_url", ""))
 
     poll_ess_job_status(
         base_url,
         reqst_id,
         config,
-        poll_interval_seconds=poll_interval,
-        max_wait_seconds=max_wait,
+        poll_interval_seconds=DEFAULT_POLL_INTERVAL_SECONDS,
+        max_wait_seconds=DEFAULT_MAX_WAIT_SECONDS,
     )
     logger.info("Oracle Fusion ESS job completed successfully.")
 
 
 def upload(config: dict) -> TransformResult:
-    """
-    Transform input CSV to Oracle Fusion format, zip, and upload to Oracle.
-
-    Args:
-        config: Config dict with input_path, output_path, base_url, jwt_*, etc.
-
-    Returns:
-        TransformResult with success/fail counts.
-    """
     logger.info("Starting upload.")
 
-    zip_path: Path | None = None
-    success = False
+    config = flatten_config(config)
+    require_flattened_config(config)
+
+    Path(DEFAULT_OUTPUT_PATH).mkdir(parents=True, exist_ok=True)
+    _empty_output_workspace()
+
     try:
         result = load_journal_entries(
             config,
@@ -185,56 +190,29 @@ def upload(config: dict) -> TransformResult:
         zip_path = _zip_output(result.output_path)
         _safe_unlink(result.output_path, label="intermediate CSV")
 
-        if config.get("base_url"):
-            _upload_to_oracle_fusion(zip_path, config)
-        else:
-            logger.warning("Skipping Oracle upload: base_url not in config.")
-
-        success = True
+        _upload_to_oracle_fusion(zip_path, config)
 
         if result.fail_count > 0:
             logger.warning(
-                "Upload completed with %d failed rows. See target-state.json for details.",
+                "Upload finished with %d failed rows (details were logged; workspace will be cleared).",
                 result.fail_count,
             )
         else:
             logger.info("Upload completed successfully (%d rows).", result.success_count)
 
         return result
-    except Exception:
-        logger.exception("Upload failed; cleaning up generated artifacts where possible.")
-        raise
     finally:
-        if zip_path is not None:
-            remove_zip = bool(config.get("base_url")) or not success
-            if remove_zip:
-                _safe_unlink(zip_path, label="zip")
-            elif success:
-                logger.info(
-                    "Leaving zip at %s (no base_url configured; use for manual upload).",
-                    zip_path,
-                )
+        _empty_output_workspace()
 
 
 @singer.utils.handle_top_exception(logger)
 def main() -> None:
-    """
-    Main entry point. Parses config and runs upload.
-    """
-    args = _parse_args()
-
+    args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS)
     logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
+        level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
-
-    config = _load_config(args.config)
-
-    missing = [k for k in REQUIRED_CONFIG_KEYS if not config.get(k)]
-    if missing:
-        raise ConfigError(f"Config missing required keys: {missing}")
-
-    upload(config)
+    upload(args.config)
 
 
 if __name__ == "__main__":

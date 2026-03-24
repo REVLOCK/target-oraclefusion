@@ -31,6 +31,23 @@ def validate_base_url(url: str) -> None:
         )
 
 
+def require_base_url(raw: str) -> str:
+    """Normalize, validate, and return Fusion base URL, or raise UploadError."""
+    url = normalize_base_url((raw or "").strip())
+    if not url:
+        raise UploadError("Config missing base_url for Oracle Fusion API")
+    validate_base_url(url)
+    return url
+
+
+def optional_config_str(config: dict, key: str) -> str:
+    """Config value as stripped string; missing or None → empty string."""
+    v = config.get(key)
+    if v is None:
+        return ""
+    return str(v).strip()
+
+
 def normalize_pem_key(pem: str) -> str:
     """Normalize PEM key for config-stored keys.
 

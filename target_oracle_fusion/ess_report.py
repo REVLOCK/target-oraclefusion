@@ -16,10 +16,24 @@ from typing import Dict, List, Optional, Tuple
 import requests
 
 from target_oracle_fusion import auth
-from target_oracle_fusion.const import ERP_INTEGRATIONS_PATH
+from target_oracle_fusion.const import (
+    DEFAULT_OUTPUT_PATH,
+    ERP_INTEGRATIONS_PATH,
+    ESS_SCRATCH_DIRNAME,
+)
 from target_oracle_fusion.exceptions import UploadError
 
 logger = logging.getLogger(__name__)
+
+
+def _ess_error_log_scratch_dir() -> Path:
+    """Directory for ESS error-log zip/extract (under ``DEFAULT_OUTPUT_PATH``)."""
+    root = Path(DEFAULT_OUTPUT_PATH)
+    root.mkdir(parents=True, exist_ok=True)
+    scratch = root / ESS_SCRATCH_DIRNAME
+    scratch.mkdir(parents=True, exist_ok=True)
+    return scratch
+
 
 # Type alias for ESS report rows: (ESSREQID, REQUESTID, EXECUTABLE_STATUS)
 EssReportRow = Tuple[str, str, str]
@@ -106,7 +120,6 @@ def fetch_ess_job_error_log(
     Returns DocumentContent (base64 zip) or None if not found.
     """
     base_url = auth.normalize_base_url(base_url)
-    auth.validate_base_url(base_url)
     url = f"{base_url}{ERP_INTEGRATIONS_PATH}"
     params = {"finder": f"ESSJobExecutionDetailsRF;requestId={request_id},fileType=ALL"}
     headers = auth.get_auth_headers(config)
@@ -201,13 +214,14 @@ def extract_first_error_from_log(document_content_b64: str, request_id: str) -> 
 
     extract_dir = None
     tmp_zip_path = None
+    scratch = _ess_error_log_scratch_dir()
 
     try:
-        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp_zip:
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False, dir=str(scratch)) as tmp_zip:
             tmp_zip.write(zip_bytes)
             tmp_zip_path = tmp_zip.name
 
-        extract_dir = tempfile.mkdtemp()
+        extract_dir = tempfile.mkdtemp(dir=str(scratch))
         with zipfile.ZipFile(tmp_zip_path, "r") as zf:
             zf.extractall(extract_dir)
 

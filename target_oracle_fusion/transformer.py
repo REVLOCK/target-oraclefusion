@@ -13,10 +13,6 @@ from pathlib import Path
 from typing import Any
 
 from target_oracle_fusion.const import (
-    DEFAULT_LEDGER_ID,
-    DEFAULT_LEDGER_NAME,
-    DEFAULT_USER_JE_CATEGORY_NAME,
-    DEFAULT_USER_JE_SOURCE_NAME,
     INPUT_FILENAME,
     ORACLE_OUTPUT_COLUMNS,
     REQUIRED_INPUT_COLUMNS,
@@ -75,6 +71,14 @@ def _format_date_created() -> str:
 def _generate_group_id() -> str:
     """Generate a unique 16-digit ID for journal batch."""
     return str(uuid.uuid4().int % (10**16)).zfill(16)
+
+
+def _str_from_config(config: dict[str, Any], key: str) -> str:
+    """Value from config for GL header fields; missing or null → empty string."""
+    v = config.get(key)
+    if v is None:
+        return ""
+    return str(v).strip()
 
 
 def _safe_str(value: Any, default: str = "") -> str:
@@ -143,14 +147,13 @@ def transform_row(
     # Fixed Oracle defaults
     out["STATUS"] = "NEW"
     out["ACTUAL_FLAG"] = "A"
-    out["SEGMENT7"] = out["SEGMENT8"] = "0"
     out["CREATION_DATE"] = "END"
 
-    # Config-driven values
-    out["LEDGER_ID"] = config.get("ledger_id", DEFAULT_LEDGER_ID)
-    out["USER_JE_SOURCE_NAME"] = config.get("user_je_source_name", DEFAULT_USER_JE_SOURCE_NAME)
-    out["USER_JE_CATEGORY_NAME"] = config.get("user_je_category_name", DEFAULT_USER_JE_CATEGORY_NAME)
-    out["LEDGER_NAME"] = config.get("ledger_name", DEFAULT_LEDGER_NAME)
+    # Config-driven values (no const fallbacks; omit in config → "")
+    out["LEDGER_ID"] = _str_from_config(config, "ledger_id")
+    out["LEDGER_NAME"] = _str_from_config(config, "ledger_name")
+    out["USER_JE_SOURCE_NAME"] = _str_from_config(config, "source_name")
+    out["USER_JE_CATEGORY_NAME"] = _str_from_config(config, "category_name")
 
     # Amount and Debit/Credit
     posting_type = _safe_str(row.get("Posting Type", "")).upper()
@@ -167,12 +170,14 @@ def transform_row(
     out["ACCOUNTING_DATE"] = _format_accounting_date(row.get("Transaction Date"))
     out["CURRENCY_CODE"] = _safe_str(row.get("Currency", "USD"))
     out["DATE_CREATED"] = _format_date_created()
-    out["SEGMENT1"] = "110"
-    out["SEGMENT2"] = _safe_str(row.get("Location", ""), "0")
-    out["SEGMENT3"] = _safe_str(row.get("Department", ""), "0")
+    out["SEGMENT1"] = _safe_str(row.get("Entity", ""), _str_from_config(config, "segment_1"))
+    out["SEGMENT2"] = _safe_str(row.get("Location", ""))
+    out["SEGMENT3"] = _safe_str(row.get("Department", ""))
     out["SEGMENT4"] = _safe_str(row.get("Account Number", ""))
-    out["SEGMENT5"] = _safe_str(row.get("Discord Channel", ""), "0")
-    out["SEGMENT6"] = "000"
+    out["SEGMENT5"] = _safe_str(row.get("Discord Channel", ""))
+    out["SEGMENT6"] = _safe_str(row.get("Intercompany", ""),_str_from_config(config, "segment_6"))
+    out["SEGMENT7"] = _safe_str(row.get("Future1", "0"))
+    out["SEGMENT8"] = _safe_str(row.get("Future2", "0"))
     out["REFERENCE1"] = out["REFERENCE2"] = out["REFERENCE3"] = out["REFERENCE4"] = out["REFERENCE5"] = description
     out["GROUP_ID"] = group_id
 
@@ -187,19 +192,6 @@ def transform_csv(
     include_header: bool = False,
     fail_on_validation_error: bool = True,
 ) -> TransformResult:
-    """
-    Transform input CSV to Oracle Fusion format and write to output_path.
-
-    Args:
-        input_path: Path to input CSV (or directory containing JournalEntries.csv).
-        output_path: Path for output CSV file.
-        config: Optional config with ledger_id, user_je_source_name, etc.
-        include_header: If True, write column headers. Default False (data rows only).
-        fail_on_validation_error: If True, raise on first critical error. Default True.
-
-    Returns:
-        TransformResult with success/fail counts and error details.
-    """
     from target_oracle_fusion.exceptions import InputError, TransformError, ValidationError
 
     config = config or {}

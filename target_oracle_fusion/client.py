@@ -19,7 +19,6 @@ from target_oracle_fusion.const import (
     DEFAULT_DOCUMENT_ACCOUNT,
     DEFAULT_ESS_JOB_REPORT_PATH,
     DEFAULT_JOB_NAME,
-    DEFAULT_PARAMETER_LIST,
     DEFAULT_POLL_INTERVAL_SECONDS,
     ERP_INTEGRATIONS_PATH,
     ESS_REPORT_SOAP_PATH,
@@ -74,7 +73,7 @@ def upload_zip(zip_path: Path, config: dict) -> str:
     Args:
         zip_path: Path to the zip file.
         config: Must include base_url, jwt_issuer, jwt_principal, private_key.
-                Optional: document_account, parameter_list, job_name, file_name.
+                Optional: job_name, file_name. ``parameter_list`` from config only (empty if omitted).
 
     Returns:
         ReqstId from the response (used for status polling).
@@ -82,16 +81,13 @@ def upload_zip(zip_path: Path, config: dict) -> str:
     Raises:
         UploadError: On API failure.
     """
-    base_url = auth.normalize_base_url(config.get("base_url", ""))
-    if not base_url:
-        raise UploadError("Config missing base_url for Oracle Fusion API")
-    auth.validate_base_url(base_url)
+    base_url = auth.require_base_url(config.get("base_url", ""))
 
     auth_headers = auth.get_auth_headers(config)
     file_name = config.get("file_name") or zip_path.name
-    document_account = config.get("document_account", DEFAULT_DOCUMENT_ACCOUNT)
+    document_account = DEFAULT_DOCUMENT_ACCOUNT
     job_name = config.get("job_name", DEFAULT_JOB_NAME)
-    parameter_list = config.get("parameter_list", DEFAULT_PARAMETER_LIST)
+    parameter_list = auth.optional_config_str(config, "parameter_list")
 
     with open(zip_path, "rb") as f:
         zip_bytes = f.read()
@@ -215,7 +211,6 @@ def get_ess_job_status(
         UploadError: On API failure or if any job has ERROR/FAILED/CANCELLED.
     """
     base_url = auth.normalize_base_url(base_url)
-    auth.validate_base_url(base_url)
     url = f"{base_url}{ESS_REPORT_SOAP_PATH}"
     report_path = config.get("ess_job_report_path", DEFAULT_ESS_JOB_REPORT_PATH)
 
@@ -249,7 +244,7 @@ def poll_ess_job_status(
     max_wait_seconds: int | None = None,
 ) -> str:
     """
-    Poll ESS job status every poll_interval_seconds (default 5 min) until terminal status.
+    Poll ESS job status until terminal success or failure.
 
     Uses SOAP report API. get_ess_job_status raises on ERROR/FAILED/CANCELLED/WARNING.
     Terminal success: SUCCEEDED, SUCCEEDED_WITH_WARNINGS, COMPLETED.
@@ -258,8 +253,8 @@ def poll_ess_job_status(
         base_url: Oracle Fusion base URL.
         request_id: ReqstId from upload.
         config: Config dict for JWT auth.
-        poll_interval_seconds: Seconds between status checks (default 300 = 5 min).
-        max_wait_seconds: Optional max total wait; None = wait indefinitely.
+        poll_interval_seconds: Seconds between status checks (default from const).
+        max_wait_seconds: Max total wait in seconds; None waits indefinitely.
 
     Returns:
         Final status: SUCCEEDED or SUCCEEDED_WITH_WARNINGS.
@@ -267,6 +262,7 @@ def poll_ess_job_status(
     Raises:
         UploadError: If any job has ERROR/FAILED/CANCELLED or max_wait exceeded.
     """
+    base_url = auth.require_base_url(base_url)
     start = time.monotonic()
 
     while True:

@@ -1,15 +1,41 @@
 {
-  "input_path": "./data/JournalEntries.csv",
-  "output_path": "./output",
-  "ledger_id": "300000003864052",
-  "user_je_source_name": "Chargebee",
-  "user_je_category_name": "Manual",
-  "ledger_name": "USA PL USD US GAAP",
+  "input_path": "./data",
+  "source_name": "Chargebee",
+  "category_name": "Revenue",
   "base_url": "https://your-fusion-instance.fa.ocs.oraclecloud.com",
-  "document_account": "fin$/generalLedger$/import$",
-  "parameter_list": "300000003863062,300000081590170,300000003864052,ALL,N,N,N",
-  "poll_interval_seconds": 300,
-  "jwt_issuer": "CBIntegrationApp",
-  "jwt_principal": "Chargebee.Integration@your-domain.com",
-  "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+  "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+  "custom_fields": [
+    {
+      "name": "ledger_id",
+      "value": "900000004271828"
+    },
+    {
+      "name": "ledger_name",
+      "value": "Sample Ledger EUR IFRS"
+    },
+    {
+      "name": "segment_1",
+      "value": "110"
+    },
+    {
+      "name": "segment_6",
+      "value": "000"
+    },
+    {
+      "name": "parameter_list",
+      "value": "900000001111111,900000002222222,900000004271828,ALL,Y,N,Y"
+    },
+    {
+      "name": "jwt_issuer",
+      "value": "AcmeFusionClient"
+    },
+    {
+      "name": "jwt_principal",
+      "value": "integration.bot@example.org"
+    },
+    {
+      "name": "jwt_x5t",
+      "value": "x7Qk9mP2nL4vR8sT1uW3yZ5aB6cD7eF0gH="
+    }
+  ]
 }

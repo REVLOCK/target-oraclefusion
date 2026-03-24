@@ -70,15 +70,19 @@ target-oracle-fusion --config config.json
 | Key | Description |
 |-----|-------------|
 | `input_path` | Path to input CSV file or directory containing `JournalEntries.csv` |
-| `output_path` | Path for output directory (or .csv file) |
-| `ledger_id` | Oracle ledger ID (default: 300000003864052) |
-| `user_je_source_name` | Journal source name (default: Chargebee) |
-| `user_je_category_name` | Journal category (default: Manual) |
-| `ledger_name` | Ledger name (default: USA PL USD US GAAP) |
+| *(workspace)* | All generated files and ESS error-log scratch use `./output` (`DEFAULT_OUTPUT_PATH` in code). The folder is **cleared at the start and end** of each CLI upload run. |
+| `ledger_id` | Oracle ledger ID (optional; omitted or null → empty in GL output) |
+| `source_name` | Journal source → Oracle `USER_JE_SOURCE_NAME` (optional; empty if omitted) |
+| `category_name` | Journal category → Oracle `USER_JE_CATEGORY_NAME` (optional; empty if omitted) |
+| `ledger_name` | Ledger name (optional; empty if omitted) |
 | `base_url` | Oracle Fusion base URL (required for upload) |
-| `parameter_list` | ESS job parameters (default: `ledger_id1,ledger_id2,ledger_id3,ALL,N,N,N`) |
+| `parameter_list` | ESS job parameter string for bulk import (optional; empty if omitted) |
+| `custom_fields` | Optional list of `{ "name": "...", "value": "..." }`; merged into the flat config (top-level keys override on conflict) |
 
-**Authentication** (JWT): `jwt_issuer`, `jwt_principal`, `private_key` (PEM string in config).
+**Fixed in code (not in JSON):** output workspace path (`DEFAULT_OUTPUT_PATH`), journal import `DocumentAccount`, ESS poll interval, and max wait are defined in `target_oracle_fusion/const.py`. The workspace is cleared before and after each CLI upload run.
+
+**Authentication** (JWT): `jwt_issuer`, `jwt_principal`, `private_key` (PEM string in config). These may live at the top level or under `custom_fields`.
+
 - optional `jwt_x5t`
 
 ### Example config.json
@@ -86,18 +90,18 @@ target-oracle-fusion --config config.json
 ```json
 {
   "input_path": "./data/JournalEntries.csv",
-  "output_path": "./output",
-  "ledger_id": "300000003864052",
-  "user_je_source_name": "Chargebee",
-  "user_je_category_name": "Manual",
-  "ledger_name": "USA PL USD US GAAP"
+  "ledger_id": "300000003860000",
+  "source_name": "Chargebee",
+  "category_name": "Test",
+  "ledger_name": "USA PL USD US FFGG"
 }
 ```
 
 ### CLI options
 
-- `--config` / `-c` - Path to JSON config file (required)
-- `-v` / `--verbose` - Verbose logging
+Uses [Singer `parse_args`](https://github.com/singer-io/singer-python) (same idea as target-intacct): `-c` / `--config` loads JSON into a dict; optional `-s` / `--state`, `--catalog`, `-d` / `--discover` are accepted.
+
+- **Required in the JSON file (top-level key):** `input_path` — must be present before `custom_fields` merge (Singer checks the file as loaded; values only under `custom_fields` are not enough for this check).
 
 ### Input CSV format
 

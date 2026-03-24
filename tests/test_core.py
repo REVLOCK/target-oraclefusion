@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from target_oracle_fusion import flatten_config, require_flattened_config
+from target_oracle_fusion.exceptions import ConfigError
 from target_oracle_fusion.transformer import transform_csv
 
 
@@ -15,13 +17,13 @@ def test_transform_csv_success() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         input_csv = Path(tmp) / "input.csv"
         input_csv.write_text(
-            "Transaction Date,Journal Entry Id,Account Number,Account Name,Description,Amount,Posting Type,Currency\n"
-            "2025-12-31,JE-001,120015,Unbilled Receivable,Test,100.50,Debit,USD\n"
-            "2025-12-31,JE-001,230010,Deferred Revenue,Test,100.50,Credit,USD\n",
+            "Transaction Date,Journal Entry Id,Account Number,Account Name,Description,Amount,Posting Type,Currency,Department,Location,Discord Channel\n"
+            "2025-12-31,JE-001,120015,Unbilled Receivable,Test,100.50,Debit,USD,,,\n"
+            "2025-12-31,JE-001,230010,Deferred Revenue,Test,100.50,Credit,USD,,,\n",
             encoding="utf-8",
         )
         output_csv = Path(tmp) / "output.csv"
-        config = {"ledger_id": "123", "user_je_source_name": "Test", "user_je_category_name": "Manual"}
+        config = {"ledger_id": "123", "source_name": "Test", "category_name": "Manual"}
 
         result = transform_csv(input_csv, output_csv, config=config)
 
@@ -42,3 +44,72 @@ def test_transform_csv_missing_columns() -> None:
 
         with pytest.raises(InputError, match="missing required columns"):
             transform_csv(input_csv, output_csv)
+
+
+def test_flatten_config_custom_fields() -> None:
+    """custom_fields merged; source_name and category_name preserved."""
+    raw = {
+        "input_path": ".",
+        "source_name": "Src",
+        "category_name": "Cat",
+        "private_key": "x",
+        "custom_fields": [
+            {"name": "ledger_id", "value": "999"},
+            {"name": "jwt_issuer", "value": "iss"},
+            {"name": "jwt_principal", "value": "prn"},
+        ],
+    }
+    flat = flatten_config(raw)
+    assert flat["ledger_id"] == "999"
+    assert flat["jwt_issuer"] == "iss"
+    assert flat["jwt_principal"] == "prn"
+    assert flat["source_name"] == "Src"
+    assert flat["category_name"] == "Cat"
+    assert "custom_fields" not in flat
+
+
+def test_flatten_config_top_level_overrides_custom_fields() -> None:
+    """Top-level keys win over custom_fields with the same name."""
+    flat = flatten_config(
+        {
+            "custom_fields": [{"name": "ledger_id", "value": "111"}],
+            "ledger_id": "222",
+        }
+    )
+    assert flat["ledger_id"] == "222"
+
+
+def _minimal_valid_flat_config() -> dict:
+    return {
+        "input_path": ".",
+        "source_name": "S",
+        "category_name": "C",
+        "base_url": "https://example.fa.ocs.oraclecloud.com",
+        "private_key": "k",
+        "ledger_id": "1",
+        "ledger_name": "L",
+        "segment_1": "110",
+        "segment_6": "000",
+        "parameter_list": "a,b,c",
+        "jwt_issuer": "iss",
+        "jwt_principal": "p",
+        "jwt_x5t": "x",
+    }
+
+
+def test_require_flattened_config_accepts_full_config() -> None:
+    require_flattened_config(_minimal_valid_flat_config())
+
+
+def test_require_flattened_config_rejects_missing_keys() -> None:
+    cfg = _minimal_valid_flat_config()
+    del cfg["jwt_x5t"]
+    with pytest.raises(ConfigError, match="jwt_x5t"):
+        require_flattened_config(cfg)
+
+
+def test_require_flattened_config_rejects_blank_string() -> None:
+    cfg = _minimal_valid_flat_config()
+    cfg["ledger_id"] = "   "
+    with pytest.raises(ConfigError, match="ledger_id"):
+        require_flattened_config(cfg)

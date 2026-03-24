@@ -1,6 +1,30 @@
 """Constants for Oracle Fusion CSV transformation."""
 
-REQUIRED_CONFIG_KEYS = ["input_path", "output_path"]
+# Singer ``parse_args`` checks raw JSON only (before ``flatten_config``); nested
+# ``custom_fields`` entries are not visible to that check.
+REQUIRED_CONFIG_KEYS = ["input_path"]
+
+# After ``flatten_config``, every key listed here must be present and non-empty
+# (matches merged top-level + ``custom_fields`` names from the project config shape).
+REQUIRED_FLATTENED_CONFIG_KEYS = [
+    "base_url",
+    "category_name",
+    "input_path",
+    "jwt_issuer",
+    "jwt_principal",
+    "jwt_x5t",
+    "ledger_id",
+    "ledger_name",
+    "parameter_list",
+    "private_key",
+    "segment_1",
+    "segment_6",
+    "source_name",
+]
+
+# All generated/downloaded artifacts for one run live here; cleared at end of upload (success or failure).
+DEFAULT_OUTPUT_PATH = "./output"
+ESS_SCRATCH_DIRNAME = ".ess_scratch"
 
 REQUIRED_INPUT_COLUMNS = [
     "Transaction Date",
@@ -11,6 +35,9 @@ REQUIRED_INPUT_COLUMNS = [
     "Amount",
     "Posting Type",
     "Currency",
+    "Department",
+    "Location",
+    "Discord Channel"
 ]
 
 INPUT_FILENAME = "JournalEntries.csv"
@@ -170,19 +197,14 @@ ORACLE_OUTPUT_COLUMNS = [
     "CREATION_DATE",
 ]
 
-DEFAULT_LEDGER_ID = "300000003864052"
-DEFAULT_USER_JE_SOURCE_NAME = "Chargebee"
-DEFAULT_USER_JE_CATEGORY_NAME = "Manual"
-DEFAULT_LEDGER_NAME = "USA PL USD US GAAP"
-
 # Oracle Fusion API
 ERP_INTEGRATIONS_PATH = "/fscmRestApi/resources/11.13.18.05/erpintegrations"
 
-# Journal Import
+# Journal Import (not configurable via JSON)
 DEFAULT_DOCUMENT_ACCOUNT = "fin$/generalLedger$/import$"
 DEFAULT_JOB_NAME = "/oracle/apps/ess/financials/generalLedger/programs/common,JournalImportLauncher"
-DEFAULT_PARAMETER_LIST = "300000003863062,300000081590170,300000003864052,ALL,N,N,N"
-DEFAULT_POLL_INTERVAL_SECONDS = 300  # 5 minutes
+DEFAULT_POLL_INTERVAL_SECONDS = 60
+DEFAULT_MAX_WAIT_SECONDS = 1800
 
 # ESS Job Status SOAP Report
 ESS_REPORT_SOAP_PATH = "/xmlpserver/services/ExternalReportWSSService"

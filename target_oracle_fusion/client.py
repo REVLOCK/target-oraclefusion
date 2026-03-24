@@ -1,11 +1,6 @@
-"""Oracle Fusion client - API client and Hotglue sink.
+"""Oracle Fusion REST/SOAP client: journal import upload and ESS job status polling.
 
-Per target-intacct pattern: client.py holds the API client for Oracle Fusion.
-- upload_zip, get_ess_job_status, poll_ess_job_status: Journal Import API (CSV mode)
-- OracleFusionSink: Hotglue sink for Singer mode
-
-Uses JWT auth (per Postman Journal Import collection):
-jwt_issuer, jwt_principal, private_key
+JWT config: jwt_issuer, jwt_principal, private_key (optional jwt_x5t).
 """
 
 from __future__ import annotations
@@ -290,7 +285,3 @@ def poll_ess_job_status(
 
         logger.info("Waiting %d seconds before next status check...", poll_interval_seconds)
         time.sleep(poll_interval_seconds)
-
-
-# OracleFusionSink moved to sink.py to avoid importing target_hotglue
-# (numpy/joblib segfault on macOS). Import from target_oracle_fusion.sink when needed.

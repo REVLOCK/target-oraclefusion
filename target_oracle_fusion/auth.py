@@ -79,7 +79,7 @@ def _find_pem_footer_start(tokens: List[str], after_header: int) -> int:
 
 
 def build_jwt_token(config: dict) -> str:
-    """Build RS256 JWT for Oracle Fusion API (per Postman collection)."""
+    """Build RS256 JWT for Oracle Fusion API."""
     try:
         import jwt
     except ImportError as e:

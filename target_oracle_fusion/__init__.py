@@ -1,7 +1,6 @@
-"""Target for Oracle-Fusion.
+"""Target for Oracle Fusion.
 
 Transforms RevRec journal entries CSV to Oracle Fusion GL format and zips output.
-Follows the same approach as target-intacct: main() -> upload() -> load_journal_entries().
 """
 
 from __future__ import annotations
@@ -90,7 +89,7 @@ def _zip_output(csv_path: Path, zip_path: Path | None = None) -> Path:
 
 
 def _write_target_state(result: TransformResult, output_dir: Path) -> Path:
-    """Write target-state.json (Hotglue compatible) with summary and errors."""
+    """Write target-state.json with summary and errors."""
     state_path = output_dir / "target-state.json"
     try:
         with open(state_path, "w", encoding="utf-8") as f:

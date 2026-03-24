@@ -37,7 +37,7 @@ class TransformResult:
     warnings: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        """Export as target-state style dict (Hotglue compatible)."""
+        """Export as target-state style dict."""
         return {
             "summary": {
                 "JournalEntries": {

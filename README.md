@@ -65,8 +65,6 @@ Transform RevRec journal entries CSV to Oracle Fusion GL format and zip the outp
 target-oracle-fusion --config config.json
 ```
 
-(Same approach as target-intacct: main → upload → load_journal_entries)
-
 ### Config options
 
 | Key | Description |

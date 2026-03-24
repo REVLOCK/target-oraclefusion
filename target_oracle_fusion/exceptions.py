@@ -1,4 +1,4 @@
-"""Oracle Fusion target exceptions - per Hotglue/target-intacct patterns."""
+"""Oracle Fusion target exceptions."""
 
 from __future__ import annotations
 

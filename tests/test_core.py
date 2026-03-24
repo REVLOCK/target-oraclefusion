@@ -9,6 +9,7 @@ import pytest
 
 from target_oracle_fusion import flatten_config, require_flattened_config
 from target_oracle_fusion.exceptions import ConfigError
+from target_oracle_fusion.ess_report import build_ess_report_soap_body
 from target_oracle_fusion.transformer import transform_csv
 
 
@@ -113,3 +114,9 @@ def test_require_flattened_config_rejects_blank_string() -> None:
     cfg["ledger_id"] = "   "
     with pytest.raises(ConfigError, match="ledger_id"):
         require_flattened_config(cfg)
+
+
+def test_build_ess_report_soap_body_escapes_interpolated_values() -> None:
+    body = build_ess_report_soap_body("1&2<3", "/path/to&Rpt.xdo")
+    assert "<pub:item>1&amp;2&lt;3</pub:item>" in body
+    assert "<pub:reportAbsolutePath>/path/to&amp;Rpt.xdo</pub:reportAbsolutePath>" in body

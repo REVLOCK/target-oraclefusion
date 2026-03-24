@@ -12,6 +12,7 @@ import zipfile
 from io import StringIO
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from xml.sax.saxutils import escape
 
 import requests
 
@@ -46,6 +47,8 @@ _ERROR_LINE_CODE_PATTERN = re.compile(r"^([A-Z]{2}\d{2})(?:,[A-Z]{2}\d{2})*\s")
 
 def build_ess_report_soap_body(request_id: str, report_path: str) -> str:
     """Build SOAP request body for ESS job details report."""
+    rid = escape(str(request_id))
+    rpath = escape(str(report_path))
     return f'''<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
    <soap:Header/>
@@ -57,11 +60,11 @@ def build_ess_report_soap_body(request_id: str, report_path: str) -> str:
                <pub:item>
                   <pub:name>ESSReqID</pub:name>
                   <pub:values>
-                     <pub:item>{request_id}</pub:item>
+                     <pub:item>{rid}</pub:item>
                   </pub:values>
                </pub:item>
             </pub:parameterNameValues>
-            <pub:reportAbsolutePath>{report_path}</pub:reportAbsolutePath>
+            <pub:reportAbsolutePath>{rpath}</pub:reportAbsolutePath>
             <pub:sizeOfDataChunkDownload>-1</pub:sizeOfDataChunkDownload>
          </pub:reportRequest>
          <pub:appParams>?</pub:appParams>

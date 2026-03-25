@@ -178,10 +178,16 @@ def transform_row(
     out["CURRENCY_CODE"] = _safe_str(row.get("Currency", "USD"))
     out["DATE_CREATED"] = _format_date_created()
 
+    acct = _safe_str(row.get("Account Number", ""))
     out["SEGMENT1"] = _safe_str(row.get("Entity", ""), entity_default)
     out["SEGMENT2"] = _safe_str(row.get("Location", ""))
-    out["SEGMENT3"] = _safe_str(row.get("Department", ""))
-    out["SEGMENT4"] = _safe_str(row.get("Account Number", ""))
+    if acct == "420010":
+        out["SEGMENT3"] = "1000"
+    elif acct == "520010":
+        out["SEGMENT3"] = "1600"
+    else:
+        out["SEGMENT3"] = "0000"
+    out["SEGMENT4"] = acct
     out["SEGMENT5"] = _safe_str(row.get("Discord Channel", ""))
     out["SEGMENT6"] = _safe_str(row.get("Intercompany", ""), intercompany_default)
     out["SEGMENT7"] = _safe_str(row.get("Future1", "0"))

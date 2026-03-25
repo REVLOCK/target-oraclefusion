@@ -141,7 +141,11 @@ def transform_row(
     config: dict[str, Any],
     group_id: str,
 ) -> dict[str, str]:
-    """Transform a single input row to Oracle Fusion output format."""
+    """Transform a single input row to Oracle Fusion output format.
+
+    ``group_id`` is the GL ``GROUP_ID``; one value is reused for every row in a
+    single ``transform_csv`` run so the whole file shares one batch identifier.
+    """
     out = _build_empty_oracle_row()
 
     # Fixed Oracle defaults
@@ -232,7 +236,7 @@ def transform_csv(
     os.close(fd)
     tmp_path = Path(tmp_name)
     wrote_output = False
-    group_ids: dict[str, str] = {}
+    batch_group_id = _generate_group_id()
     result = TransformResult(output_path=output_path)
 
     try:
@@ -261,11 +265,8 @@ def transform_csv(
                         )
                     continue
 
-                if je_id not in group_ids:
-                    group_ids[je_id] = _generate_group_id()
-
                 try:
-                    out_row = transform_row(row, config, group_ids[je_id])
+                    out_row = transform_row(row, config, batch_group_id)
                     writer.writerow(out_row)
                     result.success_count += 1
                 except Exception as e:

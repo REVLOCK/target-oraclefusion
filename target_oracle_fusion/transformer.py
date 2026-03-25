@@ -167,17 +167,22 @@ def transform_row(
 
     # Input → Output mapping (populated fields only)
     description = _safe_str(row.get("Description", ""))
+    seg1_default = _str_from_config(config, "segment_1")
+    seg6_default = _str_from_config(config, "segment_6")
+
     out["ACCOUNTING_DATE"] = _format_accounting_date(row.get("Transaction Date"))
     out["CURRENCY_CODE"] = _safe_str(row.get("Currency", "USD"))
     out["DATE_CREATED"] = _format_date_created()
-    out["SEGMENT1"] = _safe_str(row.get("Entity", ""), _str_from_config(config, "segment_1"))
+
+    out["SEGMENT1"] = _safe_str(row.get("Entity", ""), seg1_default)
     out["SEGMENT2"] = _safe_str(row.get("Location", ""))
     out["SEGMENT3"] = _safe_str(row.get("Department", ""))
     out["SEGMENT4"] = _safe_str(row.get("Account Number", ""))
     out["SEGMENT5"] = _safe_str(row.get("Discord Channel", ""))
-    out["SEGMENT6"] = _safe_str(row.get("Intercompany", ""),_str_from_config(config, "segment_6"))
+    out["SEGMENT6"] = _safe_str(row.get("Intercompany", ""), seg6_default)
     out["SEGMENT7"] = _safe_str(row.get("Future1", "0"))
     out["SEGMENT8"] = _safe_str(row.get("Future2", "0"))
+
     out["REFERENCE1"] = out["REFERENCE2"] = out["REFERENCE3"] = out["REFERENCE4"] = out["REFERENCE5"] = description
     out["GROUP_ID"] = group_id
 

@@ -237,8 +237,11 @@ def extract_first_error_from_log(document_content_b64: str, request_id: str) -> 
         if error_msg:
             return error_msg
         if content.strip():
-            return content[:500]
-        return "No error details in log file"
+            return (
+                "Oracle error log did not contain a recognizable error code. "
+                f"(Reference ID: {request_id})"
+            )
+        return f"No error details in log file. (Reference ID: {request_id})"
 
     except Exception as e:
         return f"Failed to extract error from log: {e}"

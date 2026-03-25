@@ -9,7 +9,7 @@ import pytest
 
 from target_oracle_fusion import flatten_config, require_flattened_config
 from target_oracle_fusion.exceptions import ConfigError
-from target_oracle_fusion.ess_report import build_ess_report_soap_body
+from target_oracle_fusion.ess_report import build_ess_report_soap_body, _extract_error_from_oracle_report
 from target_oracle_fusion.transformer import transform_csv
 
 
@@ -120,3 +120,26 @@ def test_build_ess_report_soap_body_escapes_interpolated_values() -> None:
     body = build_ess_report_soap_body("1&2<3", "/path/to&Rpt.xdo")
     assert "<pub:item>1&amp;2&lt;3</pub:item>" in body
     assert "<pub:reportAbsolutePath>/path/to&amp;Rpt.xdo</pub:reportAbsolutePath>" in body
+
+
+def test_extract_error_from_unbalanced_journal_eu02() -> None:
+    """EU02 lives under Unbalanced Journal Entries; Error Lines block can be empty."""
+    sample = """
+=================================================   Unbalanced Journal Entries**   =================================================
+
+Error                                                                            Total
+Code  Journal Entry Name                    Batch Name                           Lines Period Name    Total Debits    Total Credits
+----- ------------------------------------ ------------------------------------ ----- ----------- ---------------- ----------------
+EU02  202512 Unbilled Receivable Reclass R 202512 Unbilled Receivable Reclass C     2 Mar-26            103,900.00       103,910.00
+
+=========================================================   Error Lines   ==========================================================
+
+Unbalanced Journal Error Codes
+------------------------------
+EU02   The journal entry is unbalanced and suspense posting isn't allowed in the ledger.
+"""
+    msg = _extract_error_from_oracle_report(sample, "4360991")
+    assert msg is not None
+    assert "EU02" in msg
+    assert "unbalanced" in msg.lower()
+    assert "4360991" in msg

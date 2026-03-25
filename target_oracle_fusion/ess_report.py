@@ -157,7 +157,44 @@ def _parse_error_key_mapping(content: str) -> Dict[str, str]:
     return mapping
 
 
-def _get_first_error_code_from_report(content: str) -> Optional[str]:
+def _looks_like_oracle_error_code(token: str) -> bool:
+    """True if token matches Oracle Journal Import style codes (e.g. EF04, EU02, WU01)."""
+    if len(token) != 4:
+        return False
+    return token[:2].isalpha() and token[2:].isdigit()
+
+
+def _get_first_error_code_from_unbalanced_section(content: str) -> Optional[str]:
+    """
+    First XX## code from the 'Unbalanced Journal Entries' table.
+
+    Oracle often puts EU02/WU01 here while the separate 'Error Lines' block is empty.
+    """
+    in_section = False
+    for line in content.splitlines():
+        raw = line.rstrip()
+        if "Unbalanced Journal" in raw and "Entr" in raw:
+            in_section = True
+            continue
+        if not in_section:
+            continue
+        if "=" * 10 in raw and ("Error Lines" in raw or "Error Key" in raw):
+            break
+
+        s = raw.strip()
+        if not s or s.startswith("-") or ("=" * 15 in s and s.strip("=") == ""):
+            continue
+
+        match = _ERROR_LINE_CODE_PATTERN.match(s)
+        if match:
+            return match.group(1).upper()
+        parts = s.split()
+        if parts and _looks_like_oracle_error_code(parts[0].upper()):
+            return parts[0].upper()
+    return None
+
+
+def _get_first_error_code_from_error_lines_section(content: str) -> Optional[str]:
     """Extract first error code from Error Lines section (e.g. EF04 from 'EF04,EP01')."""
     in_error_lines = False
     for line in content.splitlines():
@@ -179,17 +216,27 @@ def _get_first_error_code_from_report(content: str) -> Optional[str]:
                 if "," in first:
                     codes = [c.strip() for c in first.split(",")]
                     for c in codes:
-                        if len(c) == 4 and c[:2].isalpha() and c[2:].isdigit():
+                        if _looks_like_oracle_error_code(c):
                             return c
                 elif _ERROR_KEY_PATTERN.match(first):
+                    return first
+                elif _looks_like_oracle_error_code(first):
                     return first
     return None
 
 
+def _get_first_error_code_from_report(content: str) -> Optional[str]:
+    """Extract first error code: Unbalanced Journal Entries, then Error Lines."""
+    code = _get_first_error_code_from_unbalanced_section(content)
+    if code:
+        return code
+    return _get_first_error_code_from_error_lines_section(content)
+
+
 def _extract_error_from_oracle_report(content: str, request_id: str) -> Optional[str]:
     """
-    Parse Oracle Journal Import report: get error code from Error Lines,
-    look up description from Error Key, return formatted message.
+    Parse Oracle Journal Import report: get error code from Unbalanced Journal Entries
+    or Error Lines, look up description from Error Key, return formatted message.
     """
     error_key_map = _parse_error_key_mapping(content)
     error_code = _get_first_error_code_from_report(content)

@@ -71,10 +71,12 @@ target-oracle-fusion --config config.json
 |-----|-------------|
 | `input_path` | Path to input CSV file or directory containing `JournalEntries.csv` |
 | *(workspace)* | All generated files and ESS error-log scratch use `./output` (`DEFAULT_OUTPUT_PATH` in code). The folder is **cleared at the start and end** of each CLI upload run. |
-| `ledger_id` | Oracle ledger ID (optional; omitted or null → empty in GL output) |
-| `source_name` | Journal source → Oracle `USER_JE_SOURCE_NAME` (optional; empty if omitted) |
-| `category_name` | Journal category → Oracle `USER_JE_CATEGORY_NAME` (optional; empty if omitted) |
-| `ledger_name` | Ledger name (optional; empty if omitted) |
+| `LEDGER_ID` | Oracle ledger ID → GL `LEDGER_ID` (required after merge for CLI upload) |
+| `LEDGER_NAME` | Ledger name → GL `LEDGER_NAME` |
+| `Entity` | Default for GL `SEGMENT1` when the CSV `Entity` cell is empty |
+| `Intercompany` | Default for GL `SEGMENT6` when the CSV `Intercompany` cell is empty |
+| `source_name` | Journal source → Oracle `USER_JE_SOURCE_NAME` |
+| `category_name` | Journal category → Oracle `USER_JE_CATEGORY_NAME` |
 | `base_url` | Oracle Fusion base URL (required for upload) |
 | `parameter_list` | ESS job parameter string for bulk import (optional; empty if omitted) |
 | `custom_fields` | Optional list of `{ "name": "...", "value": "..." }`; merged into the flat config (top-level keys override on conflict) |
@@ -90,10 +92,12 @@ target-oracle-fusion --config config.json
 ```json
 {
   "input_path": "./data/JournalEntries.csv",
-  "ledger_id": "300000003860000",
+  "LEDGER_ID": "300000003860000",
+  "LEDGER_NAME": "USA PL USD US FFGG",
+  "Entity": "110",
+  "Intercompany": "000",
   "source_name": "Chargebee",
-  "category_name": "Test",
-  "ledger_name": "USA PL USD US FFGG"
+  "category_name": "Test"
 }
 ```
 

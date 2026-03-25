@@ -7,18 +7,18 @@ REQUIRED_CONFIG_KEYS = ["input_path"]
 # After ``flatten_config``, every key listed here must be present and non-empty
 # (matches merged top-level + ``custom_fields`` names from the project config shape).
 REQUIRED_FLATTENED_CONFIG_KEYS = [
+    "LEDGER_ID",
+    "LEDGER_NAME",
+    "Entity",
+    "Intercompany",
     "base_url",
     "category_name",
     "input_path",
     "jwt_issuer",
     "jwt_principal",
     "jwt_x5t",
-    "ledger_id",
-    "ledger_name",
     "parameter_list",
     "private_key",
-    "segment_1",
-    "segment_6",
     "source_name",
 ]
 

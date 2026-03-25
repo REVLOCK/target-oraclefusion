@@ -6,19 +6,19 @@
   "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
   "custom_fields": [
     {
-      "name": "ledger_id",
+      "name": "LEDGER_ID",
       "value": "900000004271828"
     },
     {
-      "name": "ledger_name",
+      "name": "LEDGER_NAME",
       "value": "Sample Ledger EUR IFRS"
     },
     {
-      "name": "segment_1",
+      "name": "Entity",
       "value": "110"
     },
     {
-      "name": "segment_6",
+      "name": "Intercompany",
       "value": "000"
     },
     {

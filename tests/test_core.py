@@ -24,7 +24,7 @@ def test_transform_csv_success() -> None:
             encoding="utf-8",
         )
         output_csv = Path(tmp) / "output.csv"
-        config = {"ledger_id": "123", "source_name": "Test", "category_name": "Manual"}
+        config = {"LEDGER_ID": "123", "source_name": "Test", "category_name": "Manual"}
 
         result = transform_csv(input_csv, output_csv, config=config)
 
@@ -87,10 +87,10 @@ def _minimal_valid_flat_config() -> dict:
         "category_name": "C",
         "base_url": "https://example.fa.ocs.oraclecloud.com",
         "private_key": "k",
-        "ledger_id": "1",
-        "ledger_name": "L",
-        "segment_1": "110",
-        "segment_6": "000",
+        "LEDGER_ID": "1",
+        "LEDGER_NAME": "L",
+        "Entity": "110",
+        "Intercompany": "000",
         "parameter_list": "a,b,c",
         "jwt_issuer": "iss",
         "jwt_principal": "p",
@@ -111,8 +111,8 @@ def test_require_flattened_config_rejects_missing_keys() -> None:
 
 def test_require_flattened_config_rejects_blank_string() -> None:
     cfg = _minimal_valid_flat_config()
-    cfg["ledger_id"] = "   "
-    with pytest.raises(ConfigError, match="ledger_id"):
+    cfg["LEDGER_ID"] = "   "
+    with pytest.raises(ConfigError, match="LEDGER_ID"):
         require_flattened_config(cfg)
 
 

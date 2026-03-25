@@ -150,8 +150,8 @@ def transform_row(
     out["CREATION_DATE"] = "END"
 
     # Config-driven values (no const fallbacks; omit in config → "")
-    out["LEDGER_ID"] = _str_from_config(config, "ledger_id")
-    out["LEDGER_NAME"] = _str_from_config(config, "ledger_name")
+    out["LEDGER_ID"] = _str_from_config(config, "LEDGER_ID")
+    out["LEDGER_NAME"] = _str_from_config(config, "LEDGER_NAME")
     out["USER_JE_SOURCE_NAME"] = _str_from_config(config, "source_name")
     out["USER_JE_CATEGORY_NAME"] = _str_from_config(config, "category_name")
 
@@ -167,19 +167,19 @@ def transform_row(
 
     # Input → Output mapping (populated fields only)
     description = _safe_str(row.get("Description", ""))
-    seg1_default = _str_from_config(config, "segment_1")
-    seg6_default = _str_from_config(config, "segment_6")
+    entity_default = _str_from_config(config, "Entity")
+    intercompany_default = _str_from_config(config, "Intercompany")
 
     out["ACCOUNTING_DATE"] = _format_accounting_date(row.get("Transaction Date"))
     out["CURRENCY_CODE"] = _safe_str(row.get("Currency", "USD"))
     out["DATE_CREATED"] = _format_date_created()
 
-    out["SEGMENT1"] = _safe_str(row.get("Entity", ""), seg1_default)
+    out["SEGMENT1"] = _safe_str(row.get("Entity", ""), entity_default)
     out["SEGMENT2"] = _safe_str(row.get("Location", ""))
     out["SEGMENT3"] = _safe_str(row.get("Department", ""))
     out["SEGMENT4"] = _safe_str(row.get("Account Number", ""))
     out["SEGMENT5"] = _safe_str(row.get("Discord Channel", ""))
-    out["SEGMENT6"] = _safe_str(row.get("Intercompany", ""), seg6_default)
+    out["SEGMENT6"] = _safe_str(row.get("Intercompany", ""), intercompany_default)
     out["SEGMENT7"] = _safe_str(row.get("Future1", "0"))
     out["SEGMENT8"] = _safe_str(row.get("Future2", "0"))
 

@@ -1,188 +1,59 @@
 # target-oracle-fusion
 
-`target-oracle-fusion` is a Singer target for Oracle-Fusion.
+Singer target that reads journal CSVs, builds Oracle Fusion GL interface files, zips them, and uploads via Oracle Fusion REST (JWT) with ESS job polling.
 
-Build with the [Meltano Target SDK](https://sdk.meltano.com).
+Repository: [github.com/REVLOCK/target-oraclefusion](https://github.com/REVLOCK/target-oraclefusion)
 
-**Source repository:** [github.com/REVLOCK/target-oraclefusion](https://github.com/REVLOCK/target-oraclefusion)
+## Quick Start
 
-## Installation
+### 1. Install
 
-Install from GitHub (canonical repo):
+```bash
+pip install git+https://github.com/REVLOCK/target-oraclefusion.git
+```
+
+Or with `pipx`:
 
 ```bash
 pipx install "git+https://github.com/REVLOCK/target-oraclefusion.git@main"
 ```
 
-For a editable local install after clone:
+### 2. Create `config.json`
 
-```bash
-git clone git@github.com:REVLOCK/target-oraclefusion.git
-cd target-oraclefusion
-pip install -e .
+`input_path` must be top-level (required by Singer). Other settings can be top-level or under `custom_fields` (see `config.sample.json`); top-level wins on duplicate names.
+
+Example (replace placeholders with your Fusion pod, ledger, JWT, and `parameter_list` from your Journal Import job):
+
+```json
+{
+  "input_path": "./data",
+  "base_url": "https://your-pod.fa.ocs.oraclecloud.com",
+  "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+  "source_name": "Chargebee",
+  "category_name": "Revenue",
+  "LEDGER_ID": "900000004271828",
+  "LEDGER_NAME": "Your Ledger Name",
+  "Entity": "110",
+  "Intercompany": "000",
+  "parameter_list": "id1,id2,ledgerId,ALL,N,N,N",
+  "jwt_issuer": "YourIntegrationClient",
+  "jwt_principal": "integration.user@example.com",
+  "jwt_x5t": "certificate-thumbprint-base64url="
+}
 ```
 
-## Configuration
+Put `JournalEntries.csv` under `input_path` (or set `input_path` to the folder that contains it).
 
-### Accepted Config Options
-
-<!--
-Developer TODO: Provide a list of config options accepted by the target.
-
-This section can be created by copy-pasting the CLI output from:
-
-```
-target-oracle-fusion --about --format=markdown
-```
--->
-
-A full list of supported settings and capabilities for this
-target is available by running:
-
-```bash
-target-oracle-fusion --about
-```
-
-### Configure using environment variables
-
-This Singer target will automatically import any environment variables within the working directory's
-`.env` if the `--config=ENV` is provided, such that config values will be considered if a matching
-environment variable is set either in the terminal context or in the `.env` file.
-
-### Source Authentication and Authorization
-
-<!--
-Developer TODO: If your target requires special access on the destination system, or any special authentication requirements, provide those here.
--->
-
-## CSV Transform (Oracle Fusion GL Format)
-
-Transform RevRec journal entries CSV to Oracle Fusion GL format and zip the output:
+### 3. Run
 
 ```bash
 target-oracle-fusion --config config.json
 ```
 
-### Config options
+Artifacts use `./output` for the run (workspace is cleared after upload). See `target_oracle_fusion/const.py` for defaults (poll interval, job name, etc.).
 
-| Key | Description |
-|-----|-------------|
-| `input_path` | Path to input CSV file or directory containing `JournalEntries.csv` |
-| *(workspace)* | All generated files and ESS error-log scratch use `./output` (`DEFAULT_OUTPUT_PATH` in code). The folder is **cleared at the start and end** of each CLI upload run. |
-| `LEDGER_ID` | Oracle ledger ID → GL `LEDGER_ID` (required after merge for CLI upload) |
-| `LEDGER_NAME` | Ledger name → GL `LEDGER_NAME` |
-| `Entity` | Default for GL `SEGMENT1` when the CSV `Entity` cell is empty |
-| `Intercompany` | Default for GL `SEGMENT6` when the CSV `Intercompany` cell is empty |
-| `source_name` | Journal source → Oracle `USER_JE_SOURCE_NAME` |
-| `category_name` | Journal category → Oracle `USER_JE_CATEGORY_NAME` |
-| `base_url` | Oracle Fusion base URL (required for upload) |
-| `parameter_list` | ESS job parameter string for bulk import (optional; empty if omitted) |
-| `custom_fields` | Optional list of `{ "name": "...", "value": "..." }`; merged into the flat config (top-level keys override on conflict) |
-
-**Fixed in code (not in JSON):** output workspace path (`DEFAULT_OUTPUT_PATH`), journal import `DocumentAccount`, ESS poll interval, and max wait are defined in `target_oracle_fusion/const.py`. The workspace is cleared before and after each CLI upload run.
-
-**Authentication** (JWT): `jwt_issuer`, `jwt_principal`, `private_key` (PEM string in config). These may live at the top level or under `custom_fields`.
-
-- optional `jwt_x5t`
-
-### Example config.json
-
-```json
-{
-  "input_path": "./data/JournalEntries.csv",
-  "LEDGER_ID": "300000003860000",
-  "LEDGER_NAME": "USA PL USD US FFGG",
-  "Entity": "110",
-  "Intercompany": "000",
-  "source_name": "Chargebee",
-  "category_name": "Test"
-}
-```
-
-### CLI options
-
-Uses [Singer `parse_args`](https://github.com/singer-io/singer-python) (same idea as target-intacct): `-c` / `--config` loads JSON into a dict; optional `-s` / `--state`, `--catalog`, `-d` / `--discover` are accepted.
-
-- **Required in the JSON file (top-level key):** `input_path` — must be present before `custom_fields` merge (Singer checks the file as loaded; values only under `custom_fields` are not enough for this check).
-
-### Input CSV format
-
-Required columns: Transaction Date, Journal Entry Id, Account Number, Account Name, Description, Amount, Posting Type, Currency.
-
-Optional: Department, Location, Discord Channel, Class, Customer Name, Tier.
-
----
-
-## Usage
-
-You can easily run `target-oracle-fusion` by itself or in a pipeline using [Meltano](https://meltano.com/).
-
-### Executing the Target Directly
+For more settings, run:
 
 ```bash
-target-oracle-fusion --version
-target-oracle-fusion --help
-# Test using the "Carbon Intensity" sample:
-tap-carbon-intensity | target-oracle-fusion --config /path/to/target-oracle-fusion-config.json
+target-oracle-fusion --about
 ```
-
-## Developer Resources
-
-Follow these instructions to contribute to this project.
-
-### Initialize your Development Environment
-
-```bash
-pipx install poetry
-poetry install
-```
-
-### Create and Run Tests
-
-Create tests within the `tests` subfolder and
-  then run:
-
-```bash
-poetry run pytest
-```
-
-You can also test the `target-oracle-fusion` CLI interface directly using `poetry run`:
-
-```bash
-poetry run target-oracle-fusion --help
-```
-
-### Testing with [Meltano](https://meltano.com/)
-
-_**Note:** This target will work in any Singer environment and does not require Meltano.
-Examples here are for convenience and to streamline end-to-end orchestration scenarios._
-
-<!--
-Developer TODO:
-Your project comes with a custom `meltano.yml` project file already created. Open the `meltano.yml` and follow any "TODO" items listed in
-the file.
--->
-
-Next, install Meltano (if you haven't already) and any needed plugins:
-
-```bash
-# Install meltano
-pipx install meltano
-# Initialize meltano within this directory
-cd target-oracle-fusion
-meltano install
-```
-
-Now you can test and orchestrate using Meltano:
-
-```bash
-# Test invocation:
-meltano invoke target-oracle-fusion --version
-# OR run a test `elt` pipeline with the Carbon Intensity sample tap:
-meltano run tap-carbon-intensity target-oracle-fusion
-```
-
-### SDK Dev Guide
-
-See the [dev guide](https://sdk.meltano.com/en/latest/dev_guide.html) for more instructions on how to use the Meltano Singer SDK to
-develop your own Singer taps and targets.

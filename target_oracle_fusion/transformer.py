@@ -243,6 +243,7 @@ def transform_csv(
     tmp_path = Path(tmp_name)
     wrote_output = False
     batch_group_id = _generate_group_id()
+    logger.info("Using GL GROUP_ID %s for all rows in this transform", batch_group_id)
     result = TransformResult(output_path=output_path)
 
     try:

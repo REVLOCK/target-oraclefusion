@@ -4,6 +4,7 @@ version = "0.0.1"
 description = "`target-oracle-fusion` is a Singer target for Oracle-Fusion, built with the Meltano Singer SDK."
 readme = "README.md"
 authors = ["Aravindh Balakrishnan <aravindh.b@chargebee.com>"]
+repository = "https://github.com/REVLOCK/target-oraclefusion"
 keywords = [
     "ELT",
     "Oracle-Fusion",

@@ -4,25 +4,23 @@
 
 Build with the [Meltano Target SDK](https://sdk.meltano.com).
 
-<!--
-
-Developer TODO: Update the below as needed to correctly describe the install procedure. For instance, if you do not have a PyPi repo, or if you want users to directly install from your git repo, you can modify this step as appropriate.
+**Source repository:** [github.com/REVLOCK/target-oraclefusion](https://github.com/REVLOCK/target-oraclefusion)
 
 ## Installation
 
-Install from PyPi:
+Install from GitHub (canonical repo):
 
 ```bash
-pipx install target-oracle-fusion
+pipx install "git+https://github.com/REVLOCK/target-oraclefusion.git@main"
 ```
 
-Install from GitHub:
+For a editable local install after clone:
 
 ```bash
-pipx install git+https://github.com/ORG_NAME/target-oracle-fusion.git@main
+git clone git@github.com:REVLOCK/target-oraclefusion.git
+cd target-oraclefusion
+pip install -e .
 ```
-
--->
 
 ## Configuration
 

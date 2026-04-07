@@ -1,4 +1,4 @@
-"""Allow running as python -m target_oracle_fusion (CSV transform mode)."""
+"""python -m target_oracle_fusion entry."""
 
 from target_oracle_fusion import main
 

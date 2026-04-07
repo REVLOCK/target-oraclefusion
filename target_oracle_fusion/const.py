@@ -1,11 +1,9 @@
-"""Constants for Oracle Fusion CSV transformation."""
+"""Defaults, column lists, and API paths."""
 
-# Singer ``parse_args`` checks raw JSON only (before ``flatten_config``); nested
-# ``custom_fields`` entries are not visible to that check.
+# Singer parse_args sees raw JSON only; custom_fields nested keys are not listed here.
 REQUIRED_CONFIG_KEYS = ["input_path"]
 
-# After ``flatten_config``, every key listed here must be present and non-empty
-# (matches merged top-level + ``custom_fields`` names from the project config shape).
+# After flatten_config, each key must be present and non-empty.
 REQUIRED_FLATTENED_CONFIG_KEYS = [
     "LEDGER_ID",
     "LEDGER_NAME",
@@ -22,7 +20,7 @@ REQUIRED_FLATTENED_CONFIG_KEYS = [
     "source_name",
 ]
 
-# All generated/downloaded artifacts for one run live here; cleared at end of upload (success or failure).
+# Run workspace; cleared after upload (success or failure).
 DEFAULT_OUTPUT_PATH = "./output"
 ESS_SCRATCH_DIRNAME = ".ess_scratch"
 
@@ -197,16 +195,16 @@ ORACLE_OUTPUT_COLUMNS = [
     "CREATION_DATE",
 ]
 
-# Oracle Fusion API
+# REST erpintegrations
 ERP_INTEGRATIONS_PATH = "/fscmRestApi/resources/11.13.18.05/erpintegrations"
 
-# Journal Import (not configurable via JSON)
+# GL journal import job (defaults; override via config where supported)
 DEFAULT_DOCUMENT_ACCOUNT = "fin$/generalLedger$/import$"
 DEFAULT_JOB_NAME = "/oracle/apps/ess/financials/generalLedger/programs/common,JournalImportLauncher"
 DEFAULT_POLL_INTERVAL_SECONDS = 60
 DEFAULT_MAX_WAIT_SECONDS = 1800
 
-# ESS Job Status SOAP Report
+# BI SOAP report (ESS status)
 ESS_REPORT_SOAP_PATH = "/xmlpserver/services/ExternalReportWSSService"
 DEFAULT_ESS_JOB_REPORT_PATH = "/Custom/Financials/XXDISCORD/XXDIS_ESSJobDetails_Report.xdo"
 ESS_MIN_ROWS_FOR_ERROR_LOG = 6

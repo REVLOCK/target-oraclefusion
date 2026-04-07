@@ -30,6 +30,8 @@ def test_transform_csv_success() -> None:
 
         assert result.success_count == 2
         assert result.fail_count == 0
+        assert len(result.batch_group_id) == 16
+        assert result.batch_group_id.isdigit()
         assert output_csv.exists()
         assert "STATUS" in output_csv.read_text() or output_csv.stat().st_size > 0
 

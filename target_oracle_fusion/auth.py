@@ -1,4 +1,4 @@
-"""Oracle Fusion API authentication - JWT and PEM helpers."""
+"""JWT auth and PEM normalization."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ def normalize_base_url(url: str) -> str:
 
 
 def validate_base_url(url: str) -> None:
-    """Raise UploadError if base_url is missing scheme or host."""
+    """Require scheme and host or raise UploadError."""
     if not url or not url.strip():
         raise UploadError("base_url is empty")
     parsed = urlparse(url)
@@ -32,16 +32,16 @@ def validate_base_url(url: str) -> None:
 
 
 def require_base_url(raw: str) -> str:
-    """Normalize, validate, and return Fusion base URL, or raise UploadError."""
+    """Return normalized base_url or raise UploadError."""
     url = normalize_base_url((raw or "").strip())
     if not url:
-        raise UploadError("Config missing base_url for Oracle Fusion API")
+        raise UploadError("Config missing base_url")
     validate_base_url(url)
     return url
 
 
 def optional_config_str(config: dict, key: str) -> str:
-    """Config value as stripped string; missing or None → empty string."""
+    """Stripped string from config or empty."""
     v = config.get(key)
     if v is None:
         return ""
@@ -49,14 +49,7 @@ def optional_config_str(config: dict, key: str) -> str:
 
 
 def normalize_pem_key(pem: str) -> str:
-    """Normalize PEM key for config-stored keys.
-
-    PEM format requires newlines between header, base64 lines, and footer.
-    Config systems often mangle this:
-    - Literal \\n (backslash-n) instead of real newlines
-    - Spaces instead of newlines (header/footer contain spaces: "BEGIN PRIVATE KEY")
-    - Leading/trailing whitespace
-    """
+    """Fix PEM stored without newlines or with literal \\n."""
     if not pem:
         return pem
     pem = pem.strip().replace("\\n", "\n")
@@ -80,7 +73,7 @@ def normalize_pem_key(pem: str) -> str:
 
 
 def _find_pem_header_end(tokens: List[str]) -> int:
-    """Index of last token in PEM header (e.g. 'KEY-----')."""
+    """Last header token index."""
     i = 0
     while i < len(tokens) and not tokens[i].endswith("KEY-----"):
         i += 1
@@ -88,7 +81,7 @@ def _find_pem_header_end(tokens: List[str]) -> int:
 
 
 def _find_pem_footer_start(tokens: List[str], after_header: int) -> int:
-    """Index of first token in PEM footer (e.g. '-----END')."""
+    """First footer token index."""
     j = after_header + 1
     while j < len(tokens) and tokens[j] != "-----END":
         j += 1
@@ -96,7 +89,7 @@ def _find_pem_footer_start(tokens: List[str], after_header: int) -> int:
 
 
 def build_jwt_token(config: dict) -> str:
-    """Build RS256 JWT for Oracle Fusion API."""
+    """Sign RS256 JWT from config."""
     try:
         import jwt
     except ImportError as e:
@@ -137,6 +130,6 @@ def build_jwt_token(config: dict) -> str:
 
 
 def get_auth_headers(config: dict) -> dict:
-    """Return headers with Authorization Bearer token for JWT auth."""
+    """Authorization: Bearer … from JWT."""
     token = build_jwt_token(config)
     return {"Authorization": f"Bearer {token}"}

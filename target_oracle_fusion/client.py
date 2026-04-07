@@ -1,7 +1,4 @@
-"""Oracle Fusion REST/SOAP client: journal import upload and ESS job status polling.
-
-JWT config: jwt_issuer, jwt_principal, private_key (optional jwt_x5t).
-"""
+"""REST bulk import upload and ESS job status via SOAP report."""
 
 from __future__ import annotations
 
@@ -31,18 +28,13 @@ logger = logging.getLogger(__name__)
 
 
 def _format_request_error(prefix: str, exc: requests.RequestException) -> str:
-    """Format RequestException with optional response body and common diagnoses."""
+    """Build a short error string from a requests failure."""
     if isinstance(exc, requests.exceptions.SSLError):
-        return (
-            f"{prefix}: SSL error connecting to Oracle Fusion. "
-            f"Check base_url and certificates. ({exc})"
-        )
+        return f"{prefix}: SSL error ({exc}). Check base_url and certs."
     if isinstance(exc, requests.exceptions.ConnectionError):
-        return (
-            f"{prefix}: Could not reach host. Verify base_url, DNS, and network/VPN. ({exc})"
-        )
+        return f"{prefix}: Connection failed ({exc}). Check base_url and network."
     if isinstance(exc, requests.exceptions.Timeout):
-        return f"{prefix}: Request timed out. ({exc})"
+        return f"{prefix}: Timeout ({exc})."
 
     response = getattr(exc, "response", None)
     if response is not None and response.status_code in (401, 403):
@@ -52,9 +44,8 @@ def _format_request_error(prefix: str, exc: requests.RequestException) -> str:
         except Exception:
             pass
         return (
-            f"{prefix}: HTTP {response.status_code}. "
-            "Authentication failed: check jwt_issuer, jwt_principal, private_key, "
-            f"jwt_x5t (if required), and server clock skew. Response: {body}"
+            f"{prefix}: HTTP {response.status_code} auth failed. "
+            f"Check JWT config and clock. {body}"
         )
 
     msg = f"{prefix}: {exc}"
@@ -66,21 +57,13 @@ def _format_request_error(prefix: str, exc: requests.RequestException) -> str:
     return msg
 
 
-def upload_zip(zip_path: Path, config: dict) -> str:
-    """
-    Upload zip file to Oracle Fusion via importBulkData.
-
-    Args:
-        zip_path: Path to the zip file.
-        config: Must include base_url, jwt_issuer, jwt_principal, private_key.
-                Optional: job_name, file_name. ``parameter_list`` from config only (empty if omitted).
-
-    Returns:
-        ReqstId from the response (used for status polling).
-
-    Raises:
-        UploadError: On API failure.
-    """
+def upload_zip(
+    zip_path: Path,
+    config: dict,
+    *,
+    batch_group_id: str,
+) -> str:
+    """POST importBulkData; return ReqstId. Raises UploadError on failure."""
     base_url = auth.require_base_url(config.get("base_url", ""))
 
     auth_headers = auth.get_auth_headers(config)
@@ -109,22 +92,22 @@ def upload_zip(zip_path: Path, config: dict) -> str:
     url = f"{base_url}{ERP_INTEGRATIONS_PATH}"
     headers = {"Content-Type": "application/json", **auth_headers}
 
-    logger.info("Uploading %s to Oracle Fusion (%s)", zip_path.name, base_url)
+    logger.info("Upload zip=%s url=%s batch=%s", zip_path.name, base_url, batch_group_id)
     try:
         resp = requests.post(url, json=payload, headers=headers, timeout=120)
         resp.raise_for_status()
     except requests.RequestException as e:
-        raise UploadError(_format_request_error("Oracle Fusion upload failed", e), response=e) from e
+        raise UploadError(_format_request_error("Upload failed", e), response=e) from e
 
     data = resp.json()
     reqst_id = data.get("ReqstId")
     if not reqst_id:
         raise UploadError(
-            f"Oracle Fusion upload response missing ReqstId: {json.dumps(data)[:500]}",
+            f"Upload response missing ReqstId: {json.dumps(data)[:500]}",
             response=data,
         )
 
-    logger.info("Upload successful. ReqstId=%s", reqst_id)
+    logger.info("Upload ok ReqstId=%s", reqst_id)
     return str(reqst_id)
 
 
@@ -134,10 +117,7 @@ def _get_detailed_error_message(
     failed_status: str,
     config: dict,
 ) -> str:
-    """
-    Fetch error log for the failed request and extract detailed message.
-    Uses failed row's REQUESTID to call error log API.
-    """
+    """Best-effort error text from the job error log API."""
     base_msg = f"ESS job failed: REQUEST_ID={failed_req_id} status={failed_status}"
 
     doc_content = ess_report.fetch_ess_job_error_log(base_url, failed_req_id, config)
@@ -156,7 +136,7 @@ def _check_for_failures_and_raise(
     rows: list[ess_report.EssReportRow],
     config: dict,
 ) -> None:
-    """Raise UploadError if any row has failure status."""
+    """Raise UploadError if any report row is a failure status."""
     for _, req_id, status in rows:
         if status in ESS_STATUS_FAILURE:
             error_msg = _get_detailed_error_message(
@@ -169,7 +149,7 @@ def _check_for_failures_and_raise(
 
 
 def _aggregate_ess_status(rows: list[ess_report.EssReportRow]) -> str:
-    """Return aggregated status: SUCCEEDED if all success, else first in-progress status."""
+    """All-success → SUCCEEDED; else first non-success status."""
     if not rows:
         return "UNKNOWN"
 
@@ -188,28 +168,7 @@ def get_ess_job_status(
     request_id: str,
     config: dict,
 ) -> str:
-    """
-    Get ESS job execution status via SOAP report API.
-
-    Calls ExternalReportWSSService runReport with ESS job details report,
-    base64-decodes the response CSV, and returns aggregated status.
-
-    Status semantics:
-    - Terminal success: SUCCEEDED, SUCCEEDED_WITH_WARNINGS, COMPLETED
-    - Terminal failure: ERROR, FAILED, CANCELLED, WARNING → raises UploadError
-    - In progress: READY, RUNNING, PAUSED, WAITING, BLOCKED
-
-    Args:
-        base_url: Oracle Fusion base URL (no trailing slash).
-        request_id: ReqstId from upload response (ESSReqID).
-        config: Config dict for JWT auth.
-
-    Returns:
-        Status string: SUCCEEDED, SUCCEEDED_WITH_WARNINGS, or in-progress status.
-
-    Raises:
-        UploadError: On API failure or if any job has ERROR/FAILED/CANCELLED.
-    """
+    """SOAP report → CSV status. Raises UploadError on HTTP error or failed job state."""
     base_url = auth.normalize_base_url(base_url)
     url = f"{base_url}{ESS_REPORT_SOAP_PATH}"
     report_path = config.get("ess_job_report_path", DEFAULT_ESS_JOB_REPORT_PATH)
@@ -225,10 +184,7 @@ def get_ess_job_status(
         resp = requests.post(url, data=body, headers=headers, timeout=90)
         resp.raise_for_status()
     except requests.RequestException as e:
-        raise UploadError(
-            _format_request_error("ESS job status (SOAP) failed", e),
-            response=e,
-        ) from e
+        raise UploadError(_format_request_error("ESS status request failed", e), response=e) from e
 
     rows = ess_report.parse_ess_report_response(resp.text)
     _check_for_failures_and_raise(base_url, rows, config)
@@ -243,31 +199,13 @@ def poll_ess_job_status(
     poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS,
     max_wait_seconds: int | None = None,
 ) -> str:
-    """
-    Poll ESS job status until terminal success or failure.
-
-    Uses SOAP report API. get_ess_job_status raises on ERROR/FAILED/CANCELLED/WARNING.
-    Terminal success: SUCCEEDED, SUCCEEDED_WITH_WARNINGS, COMPLETED.
-
-    Args:
-        base_url: Oracle Fusion base URL.
-        request_id: ReqstId from upload.
-        config: Config dict for JWT auth.
-        poll_interval_seconds: Seconds between status checks (default from const).
-        max_wait_seconds: Max total wait in seconds; None waits indefinitely.
-
-    Returns:
-        Final status: SUCCEEDED or SUCCEEDED_WITH_WARNINGS.
-
-    Raises:
-        UploadError: If any job has ERROR/FAILED/CANCELLED or max_wait exceeded.
-    """
+    """Poll get_ess_job_status until success or UploadError (failure or timeout)."""
     base_url = auth.require_base_url(base_url)
     start = time.monotonic()
 
     while True:
         status = get_ess_job_status(base_url, request_id, config)
-        logger.info("ESS job status: %s (ReqstId=%s)", status, request_id)
+        logger.info("ESS status=%s ReqstId=%s", status, request_id)
 
         if status in ESS_STATUS_SUCCESS:
             return status
@@ -275,9 +213,9 @@ def poll_ess_job_status(
         elapsed = time.monotonic() - start
         if max_wait_seconds is not None and elapsed >= max_wait_seconds:
             raise UploadError(
-                f"ESS job still in progress after {max_wait_seconds}s (status={status})",
+                f"ESS still running after {max_wait_seconds}s (status={status})",
                 response={"status": status},
             )
 
-        logger.info("Waiting %d seconds before next status check...", poll_interval_seconds)
+        logger.info("Next ESS poll in %ds", poll_interval_seconds)
         time.sleep(poll_interval_seconds)

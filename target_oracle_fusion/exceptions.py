@@ -1,10 +1,10 @@
-"""Oracle Fusion target exceptions."""
+"""Target exception types."""
 
 from __future__ import annotations
 
 
 class TargetOracleFusionError(Exception):
-    """Base exception for target-oracle-fusion."""
+    """Base error with optional response payload."""
 
     def __init__(self, msg: str, response: object = None) -> None:
         super().__init__(msg)
@@ -16,24 +16,24 @@ class TargetOracleFusionError(Exception):
 
 
 class ConfigError(TargetOracleFusionError):
-    """Invalid or missing config (e.g. missing required keys, bad JSON)."""
+    """Bad or incomplete config."""
 
 
 class InputError(TargetOracleFusionError):
-    """Invalid input (e.g. file not found, missing columns, empty data)."""
+    """Missing or unusable input file or columns."""
 
 
 class ValidationError(TargetOracleFusionError):
-    """Data validation failed (e.g. invalid row, missing required field)."""
+    """Row or field validation failed."""
 
 
 class TransformError(TargetOracleFusionError):
-    """Transformation failed (e.g. date parse error, type conversion)."""
+    """Row transform failed."""
 
 
 class OutputError(TargetOracleFusionError):
-    """Output write failed (e.g. permission denied, disk full)."""
+    """Could not write output artifact."""
 
 
 class UploadError(TargetOracleFusionError):
-    """Oracle Fusion API upload or ESS job failed."""
+    """API upload or job status failure."""

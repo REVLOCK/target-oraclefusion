@@ -1,4 +1,4 @@
-"""Oracle Fusion target: CSV → GL format, zip, optional REST upload and ESS polling."""
+"""Singer target: journal CSV → GL file, zip, upload, ESS poll."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ logger = singer.get_logger()
 
 
 def _safe_unlink(path: Path, *, label: str = "file") -> None:
-    """Remove a file if it exists; log failures without raising."""
+    """Delete file if present; log failures only."""
     try:
         path.unlink()
         logger.info("Removed %s: %s", label, path)
@@ -42,7 +42,7 @@ def _safe_unlink(path: Path, *, label: str = "file") -> None:
 
 
 def _empty_output_workspace() -> None:
-    """Remove all contents of ``DEFAULT_OUTPUT_PATH``; keep the directory."""
+    """Clear the output workspace; keep the root directory."""
     root = Path(DEFAULT_OUTPUT_PATH)
     if not root.is_dir():
         return
@@ -61,7 +61,7 @@ def _empty_output_workspace() -> None:
 
 
 def flatten_config(config: Any) -> Dict[str, Any]:
-    """Merge ``custom_fields`` name/value pairs, then top-level keys (top-level wins)."""
+    """Merge custom_fields entries, then top-level keys (top-level wins)."""
     if not isinstance(config, dict):
         raise ConfigError("config must be a JSON object")
 
@@ -86,7 +86,7 @@ def flatten_config(config: Any) -> Dict[str, Any]:
 
 
 def require_flattened_config(config: dict) -> None:
-    """Raise ``ConfigError`` if any required key is missing or empty after ``flatten_config``."""
+    """Raise ConfigError if a required flattened key is missing or blank."""
     missing: list[str] = []
     for key in REQUIRED_FLATTENED_CONFIG_KEYS:
         val = config.get(key)
@@ -102,7 +102,7 @@ def require_flattened_config(config: dict) -> None:
 
 
 def _zip_output(csv_path: Path, zip_path: Path | None = None) -> Path:
-    """Zip the output CSV file. Name: Glinterface_chargebee_<unique_id>.zip"""
+    """Zip the CSV; default archive name uses ZIP_FILENAME_PREFIX and a timestamp."""
     if zip_path is None:
         unique_id = int(time.time() * 1000)
         zip_name = f"{ZIP_FILENAME_PREFIX}_{unique_id}.zip"
@@ -119,7 +119,7 @@ def _zip_output(csv_path: Path, zip_path: Path | None = None) -> Path:
 
 
 def _write_target_state(result: TransformResult, output_dir: Path) -> Path:
-    """Write target-state.json with summary and errors."""
+    """Write target-state.json."""
     state_path = output_dir / "target-state.json"
     try:
         with open(state_path, "w", encoding="utf-8") as f:
@@ -156,9 +156,14 @@ def load_journal_entries(
     return result
 
 
-def _upload_to_oracle_fusion(zip_path: Path, config: dict) -> None:
-    """Upload zip to Oracle Fusion and poll ESS job status until complete."""
-    reqst_id = upload_zip(zip_path, config)
+def _upload_to_oracle_fusion(
+    zip_path: Path,
+    config: dict,
+    *,
+    batch_group_id: str,
+) -> None:
+    """Upload zip and poll until the background job completes."""
+    reqst_id = upload_zip(zip_path, config, batch_group_id=batch_group_id)
     base_url = auth.normalize_base_url(config.get("base_url", ""))
 
     poll_ess_job_status(
@@ -168,11 +173,11 @@ def _upload_to_oracle_fusion(zip_path: Path, config: dict) -> None:
         poll_interval_seconds=DEFAULT_POLL_INTERVAL_SECONDS,
         max_wait_seconds=DEFAULT_MAX_WAIT_SECONDS,
     )
-    logger.info("Oracle Fusion ESS job completed successfully.")
+    logger.info("ESS job completed.")
 
 
 def upload(config: dict) -> TransformResult:
-    logger.info("Starting upload.")
+    logger.info("Upload started.")
 
     config = flatten_config(config)
     require_flattened_config(config)
@@ -190,15 +195,12 @@ def upload(config: dict) -> TransformResult:
         zip_path = _zip_output(result.output_path)
         _safe_unlink(result.output_path, label="intermediate CSV")
 
-        _upload_to_oracle_fusion(zip_path, config)
+        _upload_to_oracle_fusion(zip_path, config, batch_group_id=result.batch_group_id)
 
         if result.fail_count > 0:
-            logger.warning(
-                "Upload finished with %d failed rows (details were logged; workspace will be cleared).",
-                result.fail_count,
-            )
+            logger.warning("Upload done with %d failed rows (see logs).", result.fail_count)
         else:
-            logger.info("Upload completed successfully (%d rows).", result.success_count)
+            logger.info("Upload done (%d rows).", result.success_count)
 
         return result
     finally:

@@ -1,28 +1,23 @@
 # target-oracle-fusion
 
-Singer target that reads journal CSVs, builds Oracle Fusion GL interface files, zips them, and uploads via Oracle Fusion REST (JWT) with ESS job polling.
+Singer target: journal CSV → GL interface file → zip → REST upload (JWT) and ESS polling.
 
-Repository: [github.com/REVLOCK/target-oraclefusion](https://github.com/REVLOCK/target-oraclefusion)
+Repo: [github.com/REVLOCK/target-oraclefusion](https://github.com/REVLOCK/target-oraclefusion)
 
-## Quick Start
+## Quick start
 
-### 1. Install
+**Install**
 
 ```bash
 pip install git+https://github.com/REVLOCK/target-oraclefusion.git
+# or: pipx install "git+https://github.com/REVLOCK/target-oraclefusion.git@main"
 ```
 
-Or with `pipx`:
+**Config** (`config.sample.json`)
 
-```bash
-pipx install "git+https://github.com/REVLOCK/target-oraclefusion.git@main"
-```
+`input_path` must be top-level (Singer). Other keys: top-level or `custom_fields`; top-level wins on duplicates.
 
-### 2. Create `config.json`
-
-`input_path` must be top-level (required by Singer). Other settings can be top-level or under `custom_fields` (see `config.sample.json`); top-level wins on duplicate names.
-
-Example (replace placeholders with your Fusion pod, ledger, JWT, and `parameter_list` from your Journal Import job):
+Example (replace placeholders):
 
 ```json
 {
@@ -42,18 +37,13 @@ Example (replace placeholders with your Fusion pod, ledger, JWT, and `parameter_
 }
 ```
 
-Put `JournalEntries.csv` under `input_path` (or set `input_path` to the folder that contains it).
+Place `JournalEntries.csv` under `input_path`.
 
-### 3. Run
+**Run**
 
 ```bash
 target-oracle-fusion --config config.json
-```
-
-Artifacts use `./output` for the run (workspace is cleared after upload). See `target_oracle_fusion/const.py` for defaults (poll interval, job name, etc.).
-
-For more settings, run:
-
-```bash
 target-oracle-fusion --about
 ```
+
+Artifacts under `./output` (cleared after upload). Defaults: `target_oracle_fusion/const.py`.

@@ -1,12 +1,13 @@
-"""Transform RevRec journal entries CSV to Oracle Fusion GL format."""
+"""Journal CSV to GL interface CSV."""
 
 from __future__ import annotations
 
 import csv
 import logging
 import os
+import secrets
 import tempfile
-import uuid
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -23,9 +24,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class TransformResult:
-    """Result of transform with success/fail counts and error details."""
+    """Transform outcome: paths, counts, batch id, errors, warnings."""
 
     output_path: Path
+    batch_group_id: str = ""
     success_count: int = 0
     fail_count: int = 0
     warning_count: int = 0
@@ -33,8 +35,9 @@ class TransformResult:
     warnings: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        """Export as target-state style dict."""
+        """Dict for target-state.json."""
         return {
+            "batch_group_id": self.batch_group_id,
             "summary": {
                 "JournalEntries": {
                     "success": self.success_count,
@@ -50,7 +53,7 @@ class TransformResult:
 
 
 def _format_accounting_date(value: Any) -> str:
-    """Convert Transaction Date to Oracle format YYYY-MM-DD."""
+    """Input date → YYYY-MM-DD when parseable."""
     if value is None or value == "":
         return ""
     s = str(value).strip()
@@ -64,17 +67,30 @@ def _format_accounting_date(value: Any) -> str:
 
 
 def _format_date_created() -> str:
-    """Return current date in DD/MM/YY format."""
+    """Today as DD/MM/YY."""
     return datetime.now().strftime("%d/%m/%y")
 
 
 def _generate_group_id() -> str:
-    """Generate a unique 16-digit ID for journal batch."""
-    return str(uuid.uuid4().int % (10**16)).zfill(16)
+    """16-digit numeric GROUP_ID (time-based with random suffix)."""
+    # Unix time as whole milliseconds since 1970-01-01 (typically 13 digits).
+    milliseconds_since_epoch = int(time.time() * 1000)
+
+    # Extra 0–999 so batches in the same millisecond get different IDs.
+    random_suffix = secrets.randbelow(1000)
+
+    # Pack time + suffix into one integer (still ≤ 16 digits for many years).
+    packed = (milliseconds_since_epoch * 1000) + random_suffix
+
+    sixteen_digits = str(packed)
+    if len(sixteen_digits) > 16:
+        sixteen_digits = sixteen_digits[-16:]
+
+    return sixteen_digits.zfill(16)
 
 
 def _str_from_config(config: dict[str, Any], key: str) -> str:
-    """Value from config for GL header fields; missing or null → empty string."""
+    """Stripped config value or empty."""
     v = config.get(key)
     if v is None:
         return ""
@@ -82,7 +98,7 @@ def _str_from_config(config: dict[str, Any], key: str) -> str:
 
 
 def _safe_str(value: Any, default: str = "") -> str:
-    """Convert value to string, handling None and empty."""
+    """Strip to string; None/empty/NaN → default."""
     if value is None or value == "":
         return default
     s = str(value).strip()
@@ -92,7 +108,7 @@ def _safe_str(value: Any, default: str = "") -> str:
 
 
 def _validate_row(row: dict[str, Any], row_num: int, je_id: str) -> tuple[list[str], list[str]]:
-    """Validate row. Returns (errors, warnings). Errors are critical; warnings are non-blocking."""
+    """Return (errors, warnings) for one row."""
     errors: list[str] = []
     warnings: list[str] = []
 
@@ -132,7 +148,7 @@ def _validate_row(row: dict[str, Any], row_num: int, je_id: str) -> tuple[list[s
 
 
 def _build_empty_oracle_row() -> dict[str, str]:
-    """Build Oracle GL row with all columns set to empty string."""
+    """Empty GL row (all columns "")."""
     return dict.fromkeys(ORACLE_OUTPUT_COLUMNS, "")
 
 
@@ -141,11 +157,7 @@ def transform_row(
     config: dict[str, Any],
     group_id: str,
 ) -> dict[str, str]:
-    """Transform a single input row to Oracle Fusion output format.
-
-    ``group_id`` is the GL ``GROUP_ID``; one value is reused for every row in a
-    single ``transform_csv`` run so the whole file shares one batch identifier.
-    """
+    """Map one CSV row to GL columns; group_id is shared for the whole file."""
     out = _build_empty_oracle_row()
 
     # Fixed Oracle defaults
@@ -243,8 +255,8 @@ def transform_csv(
     tmp_path = Path(tmp_name)
     wrote_output = False
     batch_group_id = _generate_group_id()
-    logger.info("Using GL GROUP_ID %s for all rows in this transform", batch_group_id)
-    result = TransformResult(output_path=output_path)
+    logger.info("Batch GROUP_ID=%s", batch_group_id)
+    result = TransformResult(output_path=output_path, batch_group_id=batch_group_id)
 
     try:
         with open(tmp_path, "w", newline="", encoding="utf-8") as f:
@@ -293,13 +305,12 @@ def transform_csv(
         wrote_output = True
 
         logger.info(
-            "Transformed %d rows from %s to %s (success=%d, fail=%d, warnings=%d)",
+            "Transform rows=%d ok=%d fail=%d warn=%d → %s",
             len(rows),
-            input_file,
-            output_path,
             result.success_count,
             result.fail_count,
             result.warning_count,
+            output_path,
         )
         result.warning_count = len(result.warnings)
         return result
@@ -307,6 +318,6 @@ def transform_csv(
         if not wrote_output and tmp_path.exists():
             try:
                 tmp_path.unlink()
-                logger.debug("Removed incomplete temp transform file: %s", tmp_path)
+                logger.debug("Removed temp file: %s", tmp_path)
             except OSError as e:
-                logger.warning("Could not remove temp transform file %s: %s", tmp_path, e)
+                logger.warning("Could not remove temp %s: %s", tmp_path, e)

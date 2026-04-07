@@ -1,4 +1,4 @@
-"""ESS job status - SOAP report and Oracle error log parsing."""
+"""ESS SOAP report parsing and job error log handling."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 def _ess_error_log_scratch_dir() -> Path:
-    """Directory for ESS error-log zip/extract (under ``DEFAULT_OUTPUT_PATH``)."""
+    """Scratch dir under the output path for error-log zip/extract."""
     root = Path(DEFAULT_OUTPUT_PATH)
     root.mkdir(parents=True, exist_ok=True)
     scratch = root / ESS_SCRATCH_DIRNAME
@@ -46,7 +46,7 @@ _ERROR_LINE_CODE_PATTERN = re.compile(r"^([A-Z]{2}\d{2})(?:,[A-Z]{2}\d{2})*\s")
 
 
 def build_ess_report_soap_body(request_id: str, report_path: str) -> str:
-    """Build SOAP request body for ESS job details report."""
+    """SOAP envelope for runReport (CSV)."""
     rid = escape(str(request_id))
     rpath = escape(str(report_path))
     return f'''<?xml version="1.0" encoding="UTF-8"?>
@@ -74,11 +74,7 @@ def build_ess_report_soap_body(request_id: str, report_path: str) -> str:
 
 
 def parse_ess_report_response(resp_text: str) -> List[EssReportRow]:
-    """
-    Parse SOAP response: extract reportBytes, base64 decode, parse CSV.
-
-    Returns list of (ESSREQID, REQUESTID, EXECUTABLE_STATUS) tuples.
-    """
+    """Decode reportBytes from SOAP and return (ESSREQID, REQUESTID, EXECUTABLE_STATUS) rows."""
     match = re.search(
         r"<(?:ns2:)?reportBytes>(.*?)</(?:ns2:)?reportBytes>",
         resp_text,
@@ -100,7 +96,7 @@ def parse_ess_report_response(resp_text: str) -> List[EssReportRow]:
 
 
 def _parse_ess_report_csv(csv_content: str) -> List[EssReportRow]:
-    """Parse ESS report CSV into (ESSREQID, REQUESTID, EXECUTABLE_STATUS) rows."""
+    """Parse status CSV into EssReportRow list."""
     rows: List[EssReportRow] = []
     reader = csv.DictReader(StringIO(csv_content))
     for row in reader:
@@ -116,12 +112,7 @@ def fetch_ess_job_error_log(
     request_id: str,
     config: dict,
 ) -> Optional[str]:
-    """
-    Fetch ESS job execution details (error log) for a failed request.
-
-    GET erpintegrations?finder=ESSJobExecutionDetailsRF;requestId=X,fileType=ALL
-    Returns DocumentContent (base64 zip) or None if not found.
-    """
+    """GET execution details; return base64 DocumentContent or None."""
     base_url = auth.normalize_base_url(base_url)
     url = f"{base_url}{ERP_INTEGRATIONS_PATH}"
     params = {"finder": f"ESSJobExecutionDetailsRF;requestId={request_id},fileType=ALL"}
@@ -131,7 +122,7 @@ def fetch_ess_job_error_log(
         resp = requests.get(url, params=params, headers=headers, timeout=60)
         resp.raise_for_status()
     except requests.RequestException as e:
-        logger.warning("Could not fetch ESS job error log for request %s: %s", request_id, e)
+        logger.warning("Error log fetch failed request=%s: %s", request_id, e)
         return None
 
     data = resp.json()
@@ -144,7 +135,7 @@ def fetch_ess_job_error_log(
 
 
 def _parse_error_key_mapping(content: str) -> Dict[str, str]:
-    """Parse Error Key section and return dict of code -> description."""
+    """Error Key section → code → description."""
     mapping: Dict[str, str] = {}
     for line in content.splitlines():
         line = line.strip()
@@ -158,18 +149,14 @@ def _parse_error_key_mapping(content: str) -> Dict[str, str]:
 
 
 def _looks_like_oracle_error_code(token: str) -> bool:
-    """True if token matches Oracle Journal Import style codes (e.g. EF04, EU02, WU01)."""
+    """True if token looks like a XX## journal import code."""
     if len(token) != 4:
         return False
     return token[:2].isalpha() and token[2:].isdigit()
 
 
 def _get_first_error_code_from_unbalanced_section(content: str) -> Optional[str]:
-    """
-    First XX## code from the 'Unbalanced Journal Entries' table.
-
-    Oracle often puts EU02/WU01 here while the separate 'Error Lines' block is empty.
-    """
+    """First XX## code under Unbalanced Journal Entries."""
     in_section = False
     for line in content.splitlines():
         raw = line.rstrip()
@@ -195,7 +182,7 @@ def _get_first_error_code_from_unbalanced_section(content: str) -> Optional[str]
 
 
 def _get_first_error_code_from_error_lines_section(content: str) -> Optional[str]:
-    """Extract first error code from Error Lines section (e.g. EF04 from 'EF04,EP01')."""
+    """First XX## code under Error Lines."""
     in_error_lines = False
     for line in content.splitlines():
         stripped = line.strip()
@@ -226,7 +213,7 @@ def _get_first_error_code_from_error_lines_section(content: str) -> Optional[str
 
 
 def _get_first_error_code_from_report(content: str) -> Optional[str]:
-    """Extract first error code: Unbalanced Journal Entries, then Error Lines."""
+    """First error code: unbalanced section, then error lines."""
     code = _get_first_error_code_from_unbalanced_section(content)
     if code:
         return code
@@ -234,10 +221,7 @@ def _get_first_error_code_from_report(content: str) -> Optional[str]:
 
 
 def _extract_error_from_oracle_report(content: str, request_id: str) -> Optional[str]:
-    """
-    Parse Oracle Journal Import report: get error code from Unbalanced Journal Entries
-    or Error Lines, look up description from Error Key, return formatted message.
-    """
+    """Map first error code to Error Key text; return formatted line."""
     error_key_map = _parse_error_key_mapping(content)
     error_code = _get_first_error_code_from_report(content)
 
@@ -253,10 +237,7 @@ def _extract_error_from_oracle_report(content: str, request_id: str) -> Optional
 
 
 def extract_first_error_from_log(document_content_b64: str, request_id: str) -> str:
-    """
-    Decode base64 DocumentContent (zip), unzip, read {request_id}.txt,
-    extract first error message. Cleans up temp files.
-    """
+    """Decode zip log, read .txt, return first parsed error (or fallback string)."""
     try:
         zip_bytes = base64.b64decode(document_content_b64)
     except Exception as e:
@@ -284,11 +265,8 @@ def extract_first_error_from_log(document_content_b64: str, request_id: str) -> 
         if error_msg:
             return error_msg
         if content.strip():
-            return (
-                "Oracle error log did not contain a recognizable error code. "
-                f"(Reference ID: {request_id})"
-            )
-        return f"No error details in log file. (Reference ID: {request_id})"
+            return f"Error log had no parseable code (ref={request_id})"
+        return f"No error details in log (ref={request_id})"
 
     except Exception as e:
         return f"Failed to extract error from log: {e}"
@@ -297,7 +275,7 @@ def extract_first_error_from_log(document_content_b64: str, request_id: str) -> 
 
 
 def _find_txt_file_in_dir(extract_dir: Path, request_id: str) -> Optional[Path]:
-    """Find {request_id}.txt or first .txt file in directory."""
+    """Prefer {request_id}.txt else first .txt under extract_dir."""
     primary = extract_dir / f"{request_id}.txt"
     if primary.exists():
         return primary
@@ -306,16 +284,16 @@ def _find_txt_file_in_dir(extract_dir: Path, request_id: str) -> Optional[Path]:
 
 
 def _cleanup_temp_files(extract_dir: Optional[str], tmp_zip_path: Optional[str]) -> None:
-    """Remove temporary zip and extracted directory."""
+    """Delete temp zip and extract dir."""
     if extract_dir and Path(extract_dir).exists():
         try:
             shutil.rmtree(extract_dir)
-            logger.debug("Removed ESS error log extract dir: %s", extract_dir)
+            logger.debug("Removed error log dir: %s", extract_dir)
         except OSError as e:
-            logger.warning("Could not remove extract dir %s: %s", extract_dir, e)
+            logger.warning("Could not remove dir %s: %s", extract_dir, e)
     if tmp_zip_path and Path(tmp_zip_path).exists():
         try:
             Path(tmp_zip_path).unlink()
-            logger.debug("Removed ESS error log temp zip: %s", tmp_zip_path)
+            logger.debug("Removed error log zip: %s", tmp_zip_path)
         except OSError as e:
-            logger.warning("Could not remove temp zip %s: %s", tmp_zip_path, e)
+            logger.warning("Could not remove zip %s: %s", tmp_zip_path, e)

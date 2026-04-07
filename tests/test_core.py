@@ -9,6 +9,7 @@ import pytest
 
 from target_oracle_fusion import flatten_config, require_flattened_config
 from target_oracle_fusion.exceptions import ConfigError
+from target_oracle_fusion.client import _parameter_list_with_batch_group
 from target_oracle_fusion.ess_report import build_ess_report_soap_body, _extract_error_from_oracle_report
 from target_oracle_fusion.transformer import transform_csv
 
@@ -116,6 +117,17 @@ def test_require_flattened_config_rejects_blank_string() -> None:
     cfg["LEDGER_ID"] = "   "
     with pytest.raises(ConfigError, match="LEDGER_ID"):
         require_flattened_config(cfg)
+
+
+def test_parameter_list_fourth_field_is_batch_group_id() -> None:
+    raw = "300000003863062,300000082228680,300000003864052,ALL,N,N,N"
+    out = _parameter_list_with_batch_group(raw, "1775555178369607")
+    assert out == "300000003863062,300000082228680,300000003864052,1775555178369607,N,N,N"
+
+
+def test_parameter_list_unchanged_if_too_few_fields() -> None:
+    raw = "a,b,c"
+    assert _parameter_list_with_batch_group(raw, "999") == raw
 
 
 def test_build_ess_report_soap_body_escapes_interpolated_values() -> None:

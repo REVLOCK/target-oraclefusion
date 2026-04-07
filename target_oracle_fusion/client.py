@@ -57,6 +57,17 @@ def _format_request_error(prefix: str, exc: requests.RequestException) -> str:
     return msg
 
 
+def _parameter_list_with_batch_group(raw: str, batch_group_id: str) -> str:
+    """Journal Import ParameterList: set 4th comma-separated field to batch GROUP_ID."""
+    if not raw.strip():
+        return raw
+    parts = [p.strip() for p in raw.split(",")]
+    if len(parts) < 4:
+        return raw
+    parts[3] = batch_group_id.strip()
+    return ",".join(parts)
+
+
 def upload_zip(
     zip_path: Path,
     config: dict,
@@ -70,7 +81,9 @@ def upload_zip(
     file_name = config.get("file_name") or zip_path.name
     document_account = DEFAULT_DOCUMENT_ACCOUNT
     job_name = config.get("job_name", DEFAULT_JOB_NAME)
-    parameter_list = auth.optional_config_str(config, "parameter_list")
+    raw_params = auth.optional_config_str(config, "parameter_list")
+    parameter_list = _parameter_list_with_batch_group(raw_params, batch_group_id)
+    logger.info("ParameterList=%s", parameter_list)
 
     with open(zip_path, "rb") as f:
         zip_bytes = f.read()

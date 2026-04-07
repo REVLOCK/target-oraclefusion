@@ -98,7 +98,6 @@ def upload_zip(
         "JobName": job_name,
         "ParameterList": parameter_list,
         "CallbackURL": "#NULL",
-        "NotificationCode": "10",
         "JobOptions": "ExtractFileType=ALL",
     }
 

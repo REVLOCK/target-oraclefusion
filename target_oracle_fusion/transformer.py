@@ -5,11 +5,9 @@ from __future__ import annotations
 import csv
 import logging
 import os
-import secrets
 import tempfile
-import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -72,21 +70,8 @@ def _format_date_created() -> str:
 
 
 def _generate_group_id() -> str:
-    """16-digit numeric GROUP_ID (time-based with random suffix)."""
-    # Unix time as whole milliseconds since 1970-01-01 (typically 13 digits).
-    milliseconds_since_epoch = int(time.time() * 1000)
-
-    # Extra 0–999 so batches in the same millisecond get different IDs.
-    random_suffix = secrets.randbelow(1000)
-
-    # Pack time + suffix into one integer (still ≤ 16 digits for many years).
-    packed = (milliseconds_since_epoch * 1000) + random_suffix
-
-    sixteen_digits = str(packed)
-    if len(sixteen_digits) > 16:
-        sixteen_digits = sixteen_digits[-16:]
-
-    return sixteen_digits.zfill(16)
+    """UTC timestamp as 14 digits: yyyyMMddHHmmss."""
+    return datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
 
 
 def _str_from_config(config: dict[str, Any], key: str) -> str:

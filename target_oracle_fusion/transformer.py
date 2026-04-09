@@ -65,8 +65,8 @@ def _format_accounting_date(value: Any) -> str:
 
 
 def _format_date_created() -> str:
-    """Today as DD/MM/YY."""
-    return datetime.now().strftime("%d/%m/%y")
+    """Today as yyyy-mm-dd."""
+    return datetime.now().strftime("%Y-%m-%d")
 
 
 def _generate_group_id() -> str:

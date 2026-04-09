@@ -190,7 +190,7 @@ def transform_row(
     out["SEGMENT7"] = _safe_str(row.get("Future1", "0"))
     out["SEGMENT8"] = _safe_str(row.get("Future2", "0"))
 
-    out["REFERENCE1"] = out["REFERENCE2"] = out["REFERENCE3"] = out["REFERENCE4"] = out["REFERENCE5"] = description
+    out["REFERENCE1"] = out["REFERENCE2"] = out["REFERENCE4"] = out["REFERENCE5"] = out["REFERENCE10"] = description
     out["GROUP_ID"] = group_id
 
     return out

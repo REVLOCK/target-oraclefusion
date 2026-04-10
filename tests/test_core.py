@@ -11,7 +11,7 @@ from target_oracle_fusion import flatten_config, require_flattened_config
 from target_oracle_fusion.exceptions import ConfigError
 from target_oracle_fusion.client import _parameter_list_with_batch_group
 from target_oracle_fusion.ess_report import build_ess_report_soap_body, _extract_error_from_oracle_report
-from target_oracle_fusion.transformer import transform_csv
+from target_oracle_fusion.transformer import department_segment, transform_csv
 
 
 def test_transform_csv_success() -> None:
@@ -35,6 +35,24 @@ def test_transform_csv_success() -> None:
         assert result.batch_group_id.isdigit()
         assert output_csv.exists()
         assert "STATUS" in output_csv.read_text() or output_csv.stat().st_size > 0
+
+
+def test_department_segment_from_config_json() -> None:
+    cfg = {"department": '{\n    "420010": "1000",\n    "520010": "1600"\n}'}
+    assert department_segment(cfg, "420010") == "1000"
+    assert department_segment(cfg, "520010") == "1600"
+    assert department_segment(cfg, "999999") == "0000"
+
+
+def test_department_segment_from_config_dict() -> None:
+    cfg = {"department": {"420010": "1000"}}
+    assert department_segment(cfg, "420010") == "1000"
+    assert department_segment(cfg, "other") == "0000"
+
+
+def test_department_segment_custom_default() -> None:
+    assert department_segment({}, "420010", default="9999") == "9999"
+    assert department_segment({"department": "{}"}, "420010", default="9999") == "9999"
 
 
 def test_transform_csv_missing_columns() -> None:

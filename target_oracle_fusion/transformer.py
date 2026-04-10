@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import logging
 import os
 import tempfile
@@ -80,6 +81,42 @@ def _str_from_config(config: dict[str, Any], key: str) -> str:
     if v is None:
         return ""
     return str(v).strip()
+
+
+def department_segment(
+    config: dict[str, Any],
+    account_number: str,
+    default: str = "0000",
+) -> str:
+    """Map account number to department (SEGMENT3) using config ``department`` JSON object or dict."""
+    raw = config.get("department")
+    if isinstance(raw, dict):
+        parsed = raw
+    elif isinstance(raw, str):
+        s = raw.strip()
+        if not s:
+            logger.warning("department_segment: blank department, default=%s account=%s", default, account_number)
+            return default
+        try:
+            parsed = json.loads(s)
+        except json.JSONDecodeError as e:
+            logger.warning("department_segment: bad JSON, default=%s account=%s err=%s", default, account_number, e)
+            return default
+    else:
+        if raw is None:
+            logger.debug("department_segment: no department key, default=%s account=%s", default, account_number)
+        else:
+            t = type(raw).__name__
+            logger.warning("department_segment: want str|dict got %s, default=%s account=%s", t, default, account_number)
+        return default
+    if not isinstance(parsed, dict):
+        logger.warning("department_segment: not a JSON object, default=%s account=%s", default, account_number)
+        return default
+    acct = str(account_number).strip()
+    table = {str(k).strip(): str(v).strip() for k, v in parsed.items()}
+    if acct not in table:
+        logger.debug("department_segment: unmapped account=%s default=%s", acct, default)
+    return table.get(acct, default)
 
 
 def _safe_str(value: Any, default: str = "") -> str:
@@ -178,12 +215,7 @@ def transform_row(
     acct = _safe_str(row.get("Account Number", ""))
     out["SEGMENT1"] = _safe_str(row.get("Entity", ""), entity_default)
     out["SEGMENT2"] = _safe_str(row.get("Location", ""))
-    if acct == "420010":
-        out["SEGMENT3"] = "1000"
-    elif acct == "520010":
-        out["SEGMENT3"] = "1600"
-    else:
-        out["SEGMENT3"] = "0000"
+    out["SEGMENT3"] = department_segment(config, acct)
     out["SEGMENT4"] = acct
     out["SEGMENT5"] = _safe_str(row.get("Discord Channel", ""))
     out["SEGMENT6"] = _safe_str(row.get("Intercompany", ""), intercompany_default)

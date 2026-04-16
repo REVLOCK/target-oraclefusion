@@ -215,20 +215,13 @@ HOTGLUE_ENV_TENANT = "TENANT"
 HOTGLUE_ENV_FLOW = "FLOW"
 HOTGLUE_ENV_JOB_ID = "JOB_ID"
 
-# ESS error log S3: read from ``source-config.json`` next to job root (``ROOT_DIR`` or ``.``).
-# If set to 1/true/yes, logs the entire file at WARNING when loaded (may contain secrets).
-ENV_ESS_PRINT_SOURCE_CONFIG_FULL = "ESS_PRINT_SOURCE_CONFIG_FULL"
-# Optional path to JSON; otherwise we try ``ROOT_DIR``, cwd, then parents (targets often cwd under ``targets/<id>/``).
-ENV_ESS_SOURCE_CONFIG_PATH = "ESS_SOURCE_CONFIG_PATH"
-SOURCE_CONFIG_FILENAME = "source-config.json"
-# When walking up from cwd looking for ``SOURCE_CONFIG_FILENAME`` (after ``ROOT_DIR`` / cwd checks).
-SOURCE_CONFIG_PARENT_WALK_MAX = 10
-SOURCE_CONFIG_KEY_AWS_ACCESS_KEY_ID = "aws_access_key_id"
-SOURCE_CONFIG_KEY_AWS_SECRET_ACCESS_KEY = "aws_secret_access_key"
-SOURCE_CONFIG_KEY_AWS_REGION = "aws_region"
-SOURCE_CONFIG_KEY_BUCKET = "bucket"
-SOURCE_CONFIG_KEY_OUTPUT_PATH_PREFIX = "output_path_prefix"
-DEFAULT_ESS_ERROR_LOG_S3_REGION = "us-east-1"
+# ESS error log S3 env fallbacks (uppercase env names from Hotglue settings).
+ENV_AWS_ACCESS_KEY_ID = "AWS_ACCESS_KEY_ID"
+ENV_AWS_SECRET_ACCESS_KEY = "AWS_SECRET_ACCESS_KEY"
+ENV_AWS_S3_BUCKET = "AWS_S3_BUCKET"
+
+# Fixed S3 key prefix for ESS error logs.
+ESS_ERROR_LOG_S3_PREFIX_TEMPLATE = "{tenant}/flows/{flow_id}/jobs/{job_id}"
 
 # ESS job status values
 ESS_STATUS_FAILURE = ("ERROR", "FAILED", "CANCELLED", "WARNING")

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import sys
 import tempfile
 import types
@@ -12,18 +11,14 @@ from unittest.mock import MagicMock
 import pytest
 
 from target_oracle_fusion import flatten_config, require_flattened_config
-from target_oracle_fusion.const import ENV_ESS_PRINT_SOURCE_CONFIG_FULL, ENV_ESS_SOURCE_CONFIG_PATH
 from target_oracle_fusion.exceptions import ConfigError
 from target_oracle_fusion.client import _parameter_list_with_batch_group
 from target_oracle_fusion.ess_report import build_ess_report_soap_body, _extract_error_from_oracle_report
 from target_oracle_fusion.error_log_s3 import (
     build_s3_object_key,
     format_output_path_prefix,
-    load_source_config,
-    merged_s3_config,
     resolve_error_log_s3_key,
     s3_config_gaps,
-    s3_upload_configured,
     upload_ess_error_log_txt,
 )
 from target_oracle_fusion.transformer import department_segment, transform_csv
@@ -200,21 +195,20 @@ def test_build_s3_object_key() -> None:
 
 def _source_cfg_template() -> dict:
     return {
-        "aws_access_key_id": "a",
-        "aws_secret_access_key": "s",
-        "bucket": "revnue",
-        "output_path_prefix": "{tenant}/flows/{flow_id}/jobs/{job_id}",
+        "AWS_ACCESS_KEY_ID": "a",
+        "AWS_SECRET_ACCESS_KEY": "s",
+        "AWS_S3_BUCKET": "revnue",
     }
 
 
 def test_format_output_path_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
     for k in ("TENANT", "FLOW", "JOB_ID"):
         monkeypatch.delenv(k, raising=False)
-    assert format_output_path_prefix("{tenant}/flows/{flow_id}/jobs/{job_id}") == ""
+    assert format_output_path_prefix() == ""
     monkeypatch.setenv("TENANT", "tenant-a")
     monkeypatch.setenv("FLOW", "flow-xyz")
     monkeypatch.setenv("JOB_ID", "job-42")
-    assert format_output_path_prefix("{tenant}/flows/{flow_id}/jobs/{job_id}") == (
+    assert format_output_path_prefix() == (
         "tenant-a/flows/flow-xyz/jobs/job-42"
     )
 
@@ -223,86 +217,26 @@ def test_resolve_error_log_s3_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TENANT", "t")
     monkeypatch.setenv("FLOW", "f")
     monkeypatch.setenv("JOB_ID", "j")
-    cfg = _source_cfg_template()
-    assert resolve_error_log_s3_key(cfg, "567654.txt") == "t/flows/f/jobs/j/567654.txt"
+    assert resolve_error_log_s3_key("567654.txt") == "t/flows/f/jobs/j/567654.txt"
 
 
 def test_s3_config_gaps(monkeypatch: pytest.MonkeyPatch) -> None:
     for k in ("TENANT", "FLOW", "JOB_ID"):
         monkeypatch.delenv(k, raising=False)
-    gaps = s3_config_gaps({"bucket": "only-bucket"})
-    assert "config.aws_access_key_id" in gaps
+    gaps = s3_config_gaps({"AWS_S3_BUCKET": "only-bucket"})
+    assert "config.AWS_ACCESS_KEY_ID" in gaps
     assert "env.TENANT" in gaps
 
 
-def test_s3_upload_configured(monkeypatch: pytest.MonkeyPatch) -> None:
-    cfg = _source_cfg_template()
-    for k in ("TENANT", "FLOW", "JOB_ID"):
-        monkeypatch.delenv(k, raising=False)
-    assert not s3_upload_configured(cfg)
-    monkeypatch.setenv("TENANT", "x")
-    monkeypatch.setenv("FLOW", "y")
-    monkeypatch.setenv("JOB_ID", "z")
-    assert s3_upload_configured(cfg)
-    cfg_incomplete = {**cfg, "bucket": ""}
-    assert not s3_upload_configured(cfg_incomplete)
-
-
-def test_merged_s3_config_uses_pipeline_when_no_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("ROOT_DIR", str(tmp_path))
-    merged = merged_s3_config({"bucket": "pipeline-bucket", "aws_access_key_id": "x"})
-    assert merged.get("bucket") == "pipeline-bucket"
-    assert merged.get("aws_access_key_id") == "x"
-
-
-def test_load_source_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    p = tmp_path / "source-config.json"
-    p.write_text('{"aws_access_key_id": "k"}', encoding="utf-8")
-    monkeypatch.setenv("ROOT_DIR", str(tmp_path))
-    data = load_source_config()
-    assert data.get("aws_access_key_id") == "k"
-
-
-def test_load_source_config_explicit_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    alt = tmp_path / "nested" / "my-source.json"
-    alt.parent.mkdir(parents=True)
-    alt.write_text('{"bucket": "explicit"}', encoding="utf-8")
-    monkeypatch.setenv(ENV_ESS_SOURCE_CONFIG_PATH, str(alt))
-    monkeypatch.delenv("ROOT_DIR", raising=False)
-    data = load_source_config()
-    assert data.get("bucket") == "explicit"
-
-
-def test_load_source_config_finds_ancestor_when_cwd_under_targets(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    """Hotglue export often runs with cwd under ``targets/<connector>/``; job root is above."""
-    job = tmp_path / "Wf_rTb"
-    target_cwd = job / "targets" / "oracle-fusion"
-    target_cwd.mkdir(parents=True)
-    (job / "source-config.json").write_text('{"bucket": "job-root"}', encoding="utf-8")
-    monkeypatch.chdir(target_cwd)
-    monkeypatch.delenv("ROOT_DIR", raising=False)
-    monkeypatch.delenv(ENV_ESS_SOURCE_CONFIG_PATH, raising=False)
-    data = load_source_config()
-    assert data.get("bucket") == "job-root"
-
-
-def test_load_source_config_prints_full_when_env(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    p = tmp_path / "source-config.json"
-    body = '{"aws_access_key_id": "k", "note": "full dump"}\n'
-    p.write_text(body, encoding="utf-8")
-    monkeypatch.setenv("ROOT_DIR", str(tmp_path))
-    monkeypatch.setenv(ENV_ESS_PRINT_SOURCE_CONFIG_FULL, "1")
-    with caplog.at_level(logging.WARNING):
-        load_source_config()
-    assert "full dump" in caplog.text
-    assert "source-config.json" in caplog.text
+def test_s3_upload_configured_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """S3 fields can come from environment when not present in target config."""
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "env-key")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "env-secret")
+    monkeypatch.setenv("AWS_S3_BUCKET", "env-bucket")
+    monkeypatch.setenv("TENANT", "t")
+    monkeypatch.setenv("FLOW", "f")
+    monkeypatch.setenv("JOB_ID", "j")
+    assert s3_config_gaps({}) == []
 
 
 def test_upload_ess_error_log_txt_with_fake_boto3(
@@ -323,4 +257,3 @@ def test_upload_ess_error_log_txt_with_fake_boto3(
     assert uri == "s3://revnue/acme/flows/FZev7QqK/jobs/ZVonkl/4360991.txt"
     mock_s3.upload_file.assert_called_once()
     mock_boto_client.assert_called_once()
-    assert mock_boto_client.call_args[1]["region_name"] == "us-east-1"

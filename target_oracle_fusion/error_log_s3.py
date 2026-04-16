@@ -1,7 +1,8 @@
-"""ESS error log .txt → S3 from ``source-config.json`` + Hotglue env; ``pip install 'target-oracle-fusion[s3]'``.
+"""ESS error log .txt → S3 from merged config + Hotglue env; ``pip install 'target-oracle-fusion[s3]'``.
 
-Hotglue places ``source-config.json`` in the job ``ROOT/`` (see ROOT_DIR env). Docs:
-https://docs.hotglue.com/transformation/writing-a-basic-script#configuration-files
+Singer **targets** get settings from the flattened target ``config`` (Hotglue); transforms also have
+``source-config.json`` under ``ROOT_DIR`` when set. We merge: file (if present) then target config
+overrides. Docs: https://docs.hotglue.com/transformation/writing-a-basic-script#configuration-files
 """
 
 from __future__ import annotations
@@ -51,7 +52,7 @@ def load_source_config(config_path: Optional[Path] = None) -> dict[str, Any]:
         root = Path(os.environ.get("ROOT_DIR", ".")).expanduser()
         path = (root / SOURCE_CONFIG_FILENAME).resolve()
 
-    logger.info(
+    logger.debug(
         "ESS error log S3: source-config path=%s exists=%s ROOT_DIR=%r cwd=%s",
         path,
         path.is_file(),
@@ -93,6 +94,19 @@ def load_source_config(config_path: Optional[Path] = None) -> dict[str, Any]:
     )
     logger.info("ESS error log S3: loaded source-config from %s (%d top-level keys)", path, len(data))
     return data
+
+
+def merged_s3_config(pipeline_config: Optional[Mapping[str, Any]] = None) -> dict[str, Any]:
+    """``source-config.json`` (if any) merged with Singer/Hotglue target ``config`` (pipeline wins on overlap)."""
+    base = load_source_config()
+    merged: dict[str, Any] = {**base, **dict(pipeline_config or {})}
+    logger.info(
+        "ESS error log S3: merged config keys=%d (from_file=%d pipeline_overlay=%s)",
+        len(merged),
+        len(base),
+        bool(pipeline_config),
+    )
+    return merged
 
 
 def format_output_path_prefix(template: str) -> str:
@@ -172,18 +186,18 @@ def upload_ess_error_log_txt(
     *,
     source_config: Optional[dict[str, Any]] = None,
 ) -> Optional[str]:
-    """Upload ``local_txt_path`` to S3 using ``source-config.json``; return ``s3://…`` or ``None``."""
-    cfg: dict[str, Any] = dict(source_config) if source_config is not None else load_source_config()
+    """Upload ``local_txt_path`` to S3 using merged file + optional target ``source_config``; return ``s3://…`` or ``None``."""
+    cfg = merged_s3_config(source_config)
     logger.debug(
-        "ESS error log S3: upload start request_id=%s source_config=%s cfg_keys=%d",
+        "ESS error log S3: upload start request_id=%s pipeline_overlay=%s merged_keys=%d",
         request_id,
-        "injected" if source_config is not None else "from_file",
+        source_config is not None,
         len(cfg),
     )
     if not s3_upload_configured(cfg):
         logger.info(
-            "ESS error log S3 skipped: need source-config.json with aws_access_key_id, aws_secret_access_key, "
-            "bucket, output_path_prefix and Hotglue env TENANT, FLOW, JOB_ID (loaded config keys=%d)",
+            "ESS error log S3 skipped: add aws_access_key_id, aws_secret_access_key, bucket, output_path_prefix "
+            "to Hotglue target config (or source-config.json) and set env TENANT, FLOW, JOB_ID (merged keys=%d)",
             len(cfg),
         )
         logger.debug("ESS error log S3 upload skipped (source-config or Hotglue env incomplete)")

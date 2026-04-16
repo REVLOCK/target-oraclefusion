@@ -18,6 +18,7 @@ from target_oracle_fusion.error_log_s3 import (
     build_s3_object_key,
     format_output_path_prefix,
     load_source_config,
+    merged_s3_config,
     resolve_error_log_s3_key,
     s3_upload_configured,
     upload_ess_error_log_txt,
@@ -234,6 +235,13 @@ def test_s3_upload_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s3_upload_configured(cfg)
     cfg_incomplete = {**cfg, "bucket": ""}
     assert not s3_upload_configured(cfg_incomplete)
+
+
+def test_merged_s3_config_uses_pipeline_when_no_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("ROOT_DIR", str(tmp_path))
+    merged = merged_s3_config({"bucket": "pipeline-bucket", "aws_access_key_id": "x"})
+    assert merged.get("bucket") == "pipeline-bucket"
+    assert merged.get("aws_access_key_id") == "x"
 
 
 def test_load_source_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -1,4 +1,8 @@
-"""ESS error log .txt → S3 from ``source-config.json`` + Hotglue env; ``pip install 'target-oracle-fusion[s3]'``."""
+"""ESS error log .txt → S3 from ``source-config.json`` + Hotglue env; ``pip install 'target-oracle-fusion[s3]'``.
+
+Hotglue places ``source-config.json`` in the job ``ROOT/`` (see ROOT_DIR env). Docs:
+https://docs.hotglue.com/transformation/writing-a-basic-script#configuration-files
+"""
 
 from __future__ import annotations
 
@@ -39,32 +43,55 @@ def _str_from_cfg(cfg: Mapping[str, Any], key: str) -> str:
 
 
 def load_source_config(config_path: Optional[Path] = None) -> dict[str, Any]:
-    """Load ``source-config.json`` from job root (``ROOT_DIR`` or cwd); missing or bad file → ``{}``."""
+    """Load ``source-config.json`` from job root per Hotglue: ``{ROOT_DIR}/source-config.json`` (default ``.``)."""
     if config_path is not None:
-        path = Path(config_path)
+        path = Path(config_path).resolve()
     else:
-        root = Path(os.environ.get("ROOT_DIR", ".")).resolve()
-        path = root / SOURCE_CONFIG_FILENAME
+        # Hotglue: ROOT_DIR is the job workspace; config files sit next to catalog.json (see docs).
+        root = Path(os.environ.get("ROOT_DIR", ".")).expanduser()
+        path = (root / SOURCE_CONFIG_FILENAME).resolve()
+
+    logger.info(
+        "ESS error log S3: source-config path=%s exists=%s ROOT_DIR=%r cwd=%s",
+        path,
+        path.is_file(),
+        os.environ.get("ROOT_DIR"),
+        os.getcwd(),
+    )
+
     if not path.is_file():
         logger.debug("ESS error log S3: no source config at %s", path)
         return {}
+
     try:
-        with path.open(encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
+        raw_text = path.read_text(encoding="utf-8")
+    except OSError as e:
         logger.warning("ESS error log S3: could not read %s: %s", path, e)
         return {}
-    if not isinstance(data, dict):
-        logger.debug("ESS error log S3: source config root is not an object at %s", path)
+
+    # Full body at DEBUG only — file may contain secrets; enable DEBUG briefly when troubleshooting.
+    logger.debug("ESS error log S3: source-config full raw from %s:\n%s", path, raw_text)
+
+    try:
+        data = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        logger.warning("ESS error log S3: invalid JSON in %s: %s", path, e)
         return {}
+
+    if not isinstance(data, dict):
+        logger.info("ESS error log S3: source-config JSON root is not an object at %s", path)
+        logger.debug("ESS error log S3: source-config raw was:\n%s", raw_text)
+        return {}
+
     logger.debug(
-        "ESS error log S3: loaded %s (aws_id=%s aws_secret=%s bucket=%s output_path_prefix=%s)",
+        "ESS error log S3: parsed %s (aws_id=%s aws_secret=%s bucket=%s output_path_prefix=%s)",
         path,
         bool(_str_from_cfg(data, SOURCE_CONFIG_KEY_AWS_ACCESS_KEY_ID)),
         bool(_str_from_cfg(data, SOURCE_CONFIG_KEY_AWS_SECRET_ACCESS_KEY)),
         bool(_str_from_cfg(data, SOURCE_CONFIG_KEY_BUCKET)),
         bool(_str_from_cfg(data, SOURCE_CONFIG_KEY_OUTPUT_PATH_PREFIX)),
     )
+    logger.info("ESS error log S3: loaded source-config from %s (%d top-level keys)", path, len(data))
     return data
 
 

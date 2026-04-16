@@ -144,6 +144,8 @@ def upload_ess_error_log_txt(
     access = _s3_value(cfg, ENV_AWS_ACCESS_KEY_ID)
     secret = _s3_value(cfg, ENV_AWS_SECRET_ACCESS_KEY)
     bucket = _s3_value(cfg, ENV_AWS_S3_BUCKET)
+    # Temporary debugging line: prints only access key id (not secret).
+    logger.info("ESS error log S3 debug: %s=%s", ENV_AWS_ACCESS_KEY_ID, access)
     path = Path(local_txt_path)
     if not path.is_file():
         logger.warning("ESS error log S3 upload skipped: not a file: %s", path)

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import sys
 import tempfile
+import types
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -11,6 +14,14 @@ from target_oracle_fusion import flatten_config, require_flattened_config
 from target_oracle_fusion.exceptions import ConfigError
 from target_oracle_fusion.client import _parameter_list_with_batch_group
 from target_oracle_fusion.ess_report import build_ess_report_soap_body, _extract_error_from_oracle_report
+from target_oracle_fusion.error_log_s3 import (
+    build_s3_object_key,
+    format_output_path_prefix,
+    load_source_config,
+    resolve_error_log_s3_key,
+    s3_upload_configured,
+    upload_ess_error_log_txt,
+)
 from target_oracle_fusion.transformer import department_segment, transform_csv
 
 
@@ -175,3 +186,80 @@ EU02   The journal entry is unbalanced and suspense posting isn't allowed in the
     assert "EU02" in msg
     assert "unbalanced" in msg.lower()
     assert "4360991" in msg
+
+
+def test_build_s3_object_key() -> None:
+    assert build_s3_object_key("", "567654.txt") == "567654.txt"
+    assert build_s3_object_key("logs/ess", "567654.txt") == "logs/ess/567654.txt"
+    assert build_s3_object_key("/logs/ess/", "567654.txt") == "logs/ess/567654.txt"
+
+
+def _source_cfg_template() -> dict:
+    return {
+        "aws_access_key_id": "a",
+        "aws_secret_access_key": "s",
+        "bucket": "revnue",
+        "output_path_prefix": "{tenant}/flows/{flow_id}/jobs/{job_id}",
+    }
+
+
+def test_format_output_path_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    for k in ("TENANT", "FLOW", "JOB_ID"):
+        monkeypatch.delenv(k, raising=False)
+    assert format_output_path_prefix("{tenant}/flows/{flow_id}/jobs/{job_id}") == ""
+    monkeypatch.setenv("TENANT", "tenant-a")
+    monkeypatch.setenv("FLOW", "flow-xyz")
+    monkeypatch.setenv("JOB_ID", "job-42")
+    assert format_output_path_prefix("{tenant}/flows/{flow_id}/jobs/{job_id}") == (
+        "tenant-a/flows/flow-xyz/jobs/job-42"
+    )
+
+
+def test_resolve_error_log_s3_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TENANT", "t")
+    monkeypatch.setenv("FLOW", "f")
+    monkeypatch.setenv("JOB_ID", "j")
+    cfg = _source_cfg_template()
+    assert resolve_error_log_s3_key(cfg, "567654.txt") == "t/flows/f/jobs/j/567654.txt"
+
+
+def test_s3_upload_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = _source_cfg_template()
+    for k in ("TENANT", "FLOW", "JOB_ID"):
+        monkeypatch.delenv(k, raising=False)
+    assert not s3_upload_configured(cfg)
+    monkeypatch.setenv("TENANT", "x")
+    monkeypatch.setenv("FLOW", "y")
+    monkeypatch.setenv("JOB_ID", "z")
+    assert s3_upload_configured(cfg)
+    cfg_incomplete = {**cfg, "bucket": ""}
+    assert not s3_upload_configured(cfg_incomplete)
+
+
+def test_load_source_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    p = tmp_path / "source-config.json"
+    p.write_text('{"aws_access_key_id": "k"}', encoding="utf-8")
+    monkeypatch.setenv("ROOT_DIR", str(tmp_path))
+    data = load_source_config()
+    assert data.get("aws_access_key_id") == "k"
+
+
+def test_upload_ess_error_log_txt_with_fake_boto3(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    mock_s3 = MagicMock()
+    mock_boto_client = MagicMock(return_value=mock_s3)
+    fake_boto3 = types.SimpleNamespace(client=mock_boto_client)
+    monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
+    monkeypatch.setenv("TENANT", "acme")
+    monkeypatch.setenv("FLOW", "FZev7QqK")
+    monkeypatch.setenv("JOB_ID", "ZVonkl")
+
+    txt = tmp_path / "4360991.txt"
+    txt.write_text("err", encoding="utf-8")
+    uri = upload_ess_error_log_txt(txt, "4360991", source_config=_source_cfg_template())
+    assert uri == "s3://revnue/acme/flows/FZev7QqK/jobs/ZVonkl/4360991.txt"
+    mock_s3.upload_file.assert_called_once()
+    mock_boto_client.assert_called_once()
+    assert mock_boto_client.call_args[1]["region_name"] == "us-east-1"

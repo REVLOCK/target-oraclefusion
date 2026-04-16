@@ -210,6 +210,20 @@ DEFAULT_ESS_JOB_REPORT_PATH = "/Custom/Financials/XXDISCORD/XXDIS_ESSJobDetails_
 ESS_MIN_ROWS_FOR_ERROR_LOG = 6
 ESS_SIXTH_ROW_INDEX = 5  # 0-based index for 6th row
 
+# Hotglue job runtime (``source-config.json`` ``output_path_prefix`` uses these from env).
+HOTGLUE_ENV_TENANT = "TENANT"
+HOTGLUE_ENV_FLOW = "FLOW"
+HOTGLUE_ENV_JOB_ID = "JOB_ID"
+
+# ESS error log S3: read from ``source-config.json`` next to job root (``ROOT_DIR`` or ``.``).
+SOURCE_CONFIG_FILENAME = "source-config.json"
+SOURCE_CONFIG_KEY_AWS_ACCESS_KEY_ID = "aws_access_key_id"
+SOURCE_CONFIG_KEY_AWS_SECRET_ACCESS_KEY = "aws_secret_access_key"
+SOURCE_CONFIG_KEY_AWS_REGION = "aws_region"
+SOURCE_CONFIG_KEY_BUCKET = "bucket"
+SOURCE_CONFIG_KEY_OUTPUT_PATH_PREFIX = "output_path_prefix"
+DEFAULT_ESS_ERROR_LOG_S3_REGION = "us-east-1"
+
 # ESS job status values
 ESS_STATUS_FAILURE = ("ERROR", "FAILED", "CANCELLED", "WARNING")
 ESS_STATUS_SUCCESS = ("SUCCEEDED", "SUCCEEDED_WITH_WARNINGS", "COMPLETED")

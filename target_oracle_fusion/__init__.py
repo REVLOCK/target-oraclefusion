@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import time
 import zipfile
@@ -16,6 +17,9 @@ from target_oracle_fusion.const import (
     DEFAULT_MAX_WAIT_SECONDS,
     DEFAULT_OUTPUT_PATH,
     DEFAULT_POLL_INTERVAL_SECONDS,
+    HOTGLUE_ENV_FLOW,
+    HOTGLUE_ENV_JOB_ID,
+    HOTGLUE_ENV_TENANT,
     INPUT_FILENAME,
     OUTPUT_FILENAME,
     REQUIRED_CONFIG_KEYS,
@@ -178,6 +182,16 @@ def _upload_to_oracle_fusion(
 
 def upload(config: dict) -> TransformResult:
     logger.info("Sync started.")
+    # Testing: HOTGLUE job env (same as error_log_s3 prefix expansion); remove when done.
+    logger.info(
+        "HOTGLUE env %s=%r %s=%r %s=%r",
+        HOTGLUE_ENV_TENANT,
+        (os.environ.get(HOTGLUE_ENV_TENANT) or "").strip(),
+        HOTGLUE_ENV_FLOW,
+        (os.environ.get(HOTGLUE_ENV_FLOW) or "").strip(),
+        HOTGLUE_ENV_JOB_ID,
+        (os.environ.get(HOTGLUE_ENV_JOB_ID) or "").strip(),
+    )
 
     config = flatten_config(config)
     require_flattened_config(config)

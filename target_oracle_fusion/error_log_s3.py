@@ -181,7 +181,11 @@ def merged_s3_config(pipeline_config: Optional[Mapping[str, Any]] = None) -> dic
 
 
 def format_output_path_prefix(template: str) -> str:
-    """Fill ``{tenant}``, ``{flow_id}``, ``{job_id}`` from Hotglue env; empty if env incomplete or template invalid."""
+    """Fill ``{tenant}``, ``{flow_id}``, ``{job_id}`` from **process env only** (``TENANT``, ``FLOW``, ``JOB_ID``).
+
+    These are never read from ``source-config.json`` or merged target config—only ``os.environ``, as Hotglue sets for jobs.
+    Returns empty if any of those env vars is missing or the template is invalid.
+    """
     tenant = _env(HOTGLUE_ENV_TENANT)
     flow_id = _env(HOTGLUE_ENV_FLOW)
     job_id = _env(HOTGLUE_ENV_JOB_ID)

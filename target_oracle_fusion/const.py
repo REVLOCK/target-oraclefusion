@@ -215,10 +215,10 @@ HOTGLUE_ENV_TENANT = "TENANT"
 HOTGLUE_ENV_FLOW = "FLOW"
 HOTGLUE_ENV_JOB_ID = "JOB_ID"
 
-# ESS error log S3 env fallbacks (uppercase env names from Hotglue settings).
-ENV_AWS_ACCESS_KEY_ID = "AWS_ACCESS_KEY_ID"
-ENV_AWS_SECRET_ACCESS_KEY = "AWS_SECRET_ACCESS_KEY"
-ENV_AWS_S3_BUCKET = "AWS_S3_BUCKET"
+# ESS error log S3 env vars (custom names to avoid collision with platform-provided AWS_* creds).
+ENV_AWS_ACCESS_KEY_ID = "HG_AWS_ACCESS_KEY_ID"
+ENV_AWS_SECRET_ACCESS_KEY = "HG_AWS_SECRET_ACCESS_KEY"
+ENV_AWS_S3_BUCKET = "HG_AWS_S3_BUCKET"
 
 # Fixed S3 key prefix for ESS error logs.
 ESS_ERROR_LOG_S3_PREFIX_TEMPLATE = "{tenant}/flows/{flow_id}/jobs/{job_id}"

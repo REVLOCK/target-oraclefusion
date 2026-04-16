@@ -195,9 +195,9 @@ def test_build_s3_object_key() -> None:
 
 def _source_cfg_template() -> dict:
     return {
-        "AWS_ACCESS_KEY_ID": "a",
-        "AWS_SECRET_ACCESS_KEY": "s",
-        "AWS_S3_BUCKET": "revnue",
+        "HG_AWS_ACCESS_KEY_ID": "a",
+        "HG_AWS_SECRET_ACCESS_KEY": "s",
+        "HG_AWS_S3_BUCKET": "revnue",
     }
 
 
@@ -223,16 +223,16 @@ def test_resolve_error_log_s3_key(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_s3_config_gaps(monkeypatch: pytest.MonkeyPatch) -> None:
     for k in ("TENANT", "FLOW", "JOB_ID"):
         monkeypatch.delenv(k, raising=False)
-    gaps = s3_config_gaps({"AWS_S3_BUCKET": "only-bucket"})
-    assert "config.AWS_ACCESS_KEY_ID" in gaps
+    gaps = s3_config_gaps({"HG_AWS_S3_BUCKET": "only-bucket"})
+    assert "config.HG_AWS_ACCESS_KEY_ID" in gaps
     assert "env.TENANT" in gaps
 
 
 def test_s3_upload_configured_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """S3 fields can come from environment when not present in target config."""
-    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "env-key")
-    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "env-secret")
-    monkeypatch.setenv("AWS_S3_BUCKET", "env-bucket")
+    monkeypatch.setenv("HG_AWS_ACCESS_KEY_ID", "env-key")
+    monkeypatch.setenv("HG_AWS_SECRET_ACCESS_KEY", "env-secret")
+    monkeypatch.setenv("HG_AWS_S3_BUCKET", "env-bucket")
     monkeypatch.setenv("TENANT", "t")
     monkeypatch.setenv("FLOW", "f")
     monkeypatch.setenv("JOB_ID", "j")

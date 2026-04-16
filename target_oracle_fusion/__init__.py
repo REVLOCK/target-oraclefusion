@@ -177,7 +177,7 @@ def _upload_to_oracle_fusion(
 
 
 def upload(config: dict) -> TransformResult:
-    logger.info("Upload started.")
+    logger.info("Sync started.")
 
     config = flatten_config(config)
     require_flattened_config(config)

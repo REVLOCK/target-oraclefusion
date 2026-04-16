@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from target_oracle_fusion import flatten_config, require_flattened_config
-from target_oracle_fusion.const import ENV_ESS_PRINT_SOURCE_CONFIG_FULL
+from target_oracle_fusion.const import ENV_ESS_PRINT_SOURCE_CONFIG_FULL, ENV_ESS_SOURCE_CONFIG_PATH
 from target_oracle_fusion.exceptions import ConfigError
 from target_oracle_fusion.client import _parameter_list_with_batch_group
 from target_oracle_fusion.ess_report import build_ess_report_soap_body, _extract_error_from_oracle_report
@@ -261,6 +261,32 @@ def test_load_source_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     monkeypatch.setenv("ROOT_DIR", str(tmp_path))
     data = load_source_config()
     assert data.get("aws_access_key_id") == "k"
+
+
+def test_load_source_config_explicit_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    alt = tmp_path / "nested" / "my-source.json"
+    alt.parent.mkdir(parents=True)
+    alt.write_text('{"bucket": "explicit"}', encoding="utf-8")
+    monkeypatch.setenv(ENV_ESS_SOURCE_CONFIG_PATH, str(alt))
+    monkeypatch.delenv("ROOT_DIR", raising=False)
+    data = load_source_config()
+    assert data.get("bucket") == "explicit"
+
+
+def test_load_source_config_finds_ancestor_when_cwd_under_targets(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Hotglue export often runs with cwd under ``targets/<connector>/``; job root is above."""
+    job = tmp_path / "Wf_rTb"
+    target_cwd = job / "targets" / "oracle-fusion"
+    target_cwd.mkdir(parents=True)
+    (job / "source-config.json").write_text('{"bucket": "job-root"}', encoding="utf-8")
+    monkeypatch.chdir(target_cwd)
+    monkeypatch.delenv("ROOT_DIR", raising=False)
+    monkeypatch.delenv(ENV_ESS_SOURCE_CONFIG_PATH, raising=False)
+    data = load_source_config()
+    assert data.get("bucket") == "job-root"
 
 
 def test_load_source_config_prints_full_when_env(

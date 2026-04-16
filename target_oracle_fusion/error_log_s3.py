@@ -1,8 +1,10 @@
 """ESS error log .txt → S3 from merged config + Hotglue env; ``pip install 'target-oracle-fusion[s3]'``.
 
-Singer **targets** get settings from the flattened target ``config`` (Hotglue); transforms also have
-``source-config.json`` under ``ROOT_DIR`` when set. We merge: file (if present) then target config
-overrides. Docs: https://docs.hotglue.com/transformation/writing-a-basic-script#configuration-files
+Singer **targets** get settings from the flattened target ``config`` (Hotglue). ``source-config.json``
+normally lives at the **job / flow workspace root** next to ``catalog.json``; the export process often
+has ``cwd`` under ``targets/<connector>/`` with ``ROOT_DIR`` unset, so we also search upward from cwd
+and honor ``ESS_SOURCE_CONFIG_PATH``. We merge: file (if present) then target config overrides.
+Docs: https://docs.hotglue.com/transformation/writing-a-basic-script#configuration-files
 """
 
 from __future__ import annotations
@@ -16,10 +18,12 @@ from typing import Any, Mapping, Optional
 from target_oracle_fusion.const import (
     DEFAULT_ESS_ERROR_LOG_S3_REGION,
     ENV_ESS_PRINT_SOURCE_CONFIG_FULL,
+    ENV_ESS_SOURCE_CONFIG_PATH,
     HOTGLUE_ENV_FLOW,
     HOTGLUE_ENV_JOB_ID,
     HOTGLUE_ENV_TENANT,
     SOURCE_CONFIG_FILENAME,
+    SOURCE_CONFIG_PARENT_WALK_MAX,
     SOURCE_CONFIG_KEY_AWS_ACCESS_KEY_ID,
     SOURCE_CONFIG_KEY_AWS_SECRET_ACCESS_KEY,
     SOURCE_CONFIG_KEY_AWS_REGION,
@@ -51,31 +55,76 @@ def _str_from_cfg(cfg: Mapping[str, Any], key: str) -> str:
     return str(v).strip()
 
 
-def load_source_config(config_path: Optional[Path] = None) -> dict[str, Any]:
-    """Load ``source-config.json`` from job root per Hotglue: ``{ROOT_DIR}/source-config.json`` (default ``.``)."""
+def _source_config_candidate_paths(config_path: Optional[Path] = None) -> list[Path]:
+    """Ordered search locations for ``source-config.json`` (first existing file wins)."""
     if config_path is not None:
-        path = Path(config_path).resolve()
-    else:
-        # Hotglue: ROOT_DIR is the job workspace; config files sit next to catalog.json (see docs).
-        root = Path(os.environ.get("ROOT_DIR", ".")).expanduser()
-        path = (root / SOURCE_CONFIG_FILENAME).resolve()
+        return [Path(config_path).resolve()]
+
+    out: list[Path] = []
+    seen: set[str] = set()
+
+    def _push(p: Path) -> None:
+        r = p.resolve()
+        key = str(r)
+        if key not in seen:
+            seen.add(key)
+            out.append(r)
+
+    explicit = _env(ENV_ESS_SOURCE_CONFIG_PATH)
+    if explicit:
+        _push(Path(explicit).expanduser())
+
+    raw_root = os.environ.get("ROOT_DIR")
+    if raw_root is not None and str(raw_root).strip():
+        _push(Path(raw_root).expanduser() / SOURCE_CONFIG_FILENAME)
+
+    cw = Path.cwd().resolve()
+    _push(cw / SOURCE_CONFIG_FILENAME)
+
+    d = cw
+    for _ in range(SOURCE_CONFIG_PARENT_WALK_MAX):
+        parent = d.parent
+        if parent == d:
+            break
+        d = parent
+        _push(d / SOURCE_CONFIG_FILENAME)
+
+    return out
+
+
+def load_source_config(config_path: Optional[Path] = None) -> dict[str, Any]:
+    """Load ``source-config.json`` from Hotglue job root, optional env path, or by walking up from cwd."""
+    candidates = _source_config_candidate_paths(config_path)
+    path: Optional[Path] = None
+    for cand in candidates:
+        if cand.is_file():
+            path = cand
+            break
 
     logger.debug(
-        "ESS error log S3: source-config path=%s exists=%s ROOT_DIR=%r cwd=%s",
+        "ESS error log S3: source-config chosen=%s exists=%s ROOT_DIR=%r cwd=%s tried_first=%s",
         path,
-        path.is_file(),
+        path is not None,
         os.environ.get("ROOT_DIR"),
         os.getcwd(),
+        candidates[0] if candidates else None,
     )
 
-    if not path.is_file():
+    if path is None:
         if _truthy_env(ENV_ESS_PRINT_SOURCE_CONFIG_FULL):
+            sample = ", ".join(str(p) for p in candidates[:5])
+            more = f" (+{len(candidates) - 5} more)" if len(candidates) > 5 else ""
             logger.warning(
-                "ESS error log S3: env %s is set but no file at %s",
+                "ESS error log S3: env %s is set but no file found (candidates: %s%s)",
                 ENV_ESS_PRINT_SOURCE_CONFIG_FULL,
-                path,
+                sample,
+                more,
             )
-        logger.debug("ESS error log S3: no source config at %s", path)
+        logger.debug(
+            "ESS error log S3: no source config (candidates n=%d: %s)",
+            len(candidates),
+            [str(p) for p in candidates],
+        )
         return {}
 
     try:

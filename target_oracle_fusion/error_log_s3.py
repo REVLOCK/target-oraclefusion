@@ -132,13 +132,6 @@ def upload_ess_error_log_txt(
         logger.warning("ESS error log S3 upload skipped: not a file: %s", path)
         return None
 
-    key = resolve_error_log_s3_key(path.name)
-    logger.info(
-        "ESS error log S3 uploading bucket=%s key=%s file=%s",
-        bucket,
-        key,
-        path.name,
-    )
     try:
         import boto3  # type: ignore[import-untyped]
     except ImportError:
@@ -146,6 +139,14 @@ def upload_ess_error_log_txt(
             "ESS error log S3 skipped: boto3 not installed; install target-oracle-fusion[s3] in the target env",
         )
         return None
+
+    key = resolve_error_log_s3_key(path.name)
+    logger.info(
+        "ESS error log S3 uploading bucket=%s key=%s file=%s",
+        bucket,
+        key,
+        path.name,
+    )
 
     try:
         client = boto3.client(

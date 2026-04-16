@@ -181,7 +181,7 @@ def _upload_to_oracle_fusion(
 
 
 def upload(config: dict) -> TransformResult:
-    logger.info("Sync started.")
+    logger.info("Upload started.")
     # Testing: HOTGLUE job env (same as error_log_s3 prefix expansion); remove when done.
     logger.info(
         "HOTGLUE env %s=%r %s=%r %s=%r",

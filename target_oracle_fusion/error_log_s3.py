@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
@@ -46,6 +48,21 @@ def _s3_value(cfg: Mapping[str, Any], key: str) -> str:
 def _missing_hotglue_envs() -> list[str]:
     required = (HOTGLUE_ENV_TENANT, HOTGLUE_ENV_FLOW, HOTGLUE_ENV_JOB_ID)
     return [f"env.{name}" for name in required if not _env(name)]
+
+
+def _import_boto3():
+    """Import boto3 from current runtime, with a fallback to the system site-packages path."""
+    try:
+        return importlib.import_module("boto3")
+    except ImportError:
+        pass
+
+    pyver = f"{sys.version_info.major}.{sys.version_info.minor}"
+    system_site = f"/usr/local/lib/python{pyver}/site-packages"
+    if system_site not in sys.path:
+        sys.path.append(system_site)
+
+    return importlib.import_module("boto3")
 
 
 def format_output_path_prefix() -> str:
@@ -133,10 +150,10 @@ def upload_ess_error_log_txt(
         return None
 
     try:
-        import boto3  # type: ignore[import-untyped]
+        boto3 = _import_boto3()
     except ImportError:
         logger.info(
-            "ESS error log S3 skipped: boto3 not installed; install target-oracle-fusion[s3] in the target env",
+            "ESS error log S3 skipped: boto3 unavailable in target runtime; verify deploy dependencies",
         )
         return None
 

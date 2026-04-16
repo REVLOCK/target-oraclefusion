@@ -216,6 +216,8 @@ HOTGLUE_ENV_FLOW = "FLOW"
 HOTGLUE_ENV_JOB_ID = "JOB_ID"
 
 # ESS error log S3: read from ``source-config.json`` next to job root (``ROOT_DIR`` or ``.``).
+# If set to 1/true/yes, logs the entire file at WARNING when loaded (may contain secrets).
+ENV_ESS_PRINT_SOURCE_CONFIG_FULL = "ESS_PRINT_SOURCE_CONFIG_FULL"
 SOURCE_CONFIG_FILENAME = "source-config.json"
 SOURCE_CONFIG_KEY_AWS_ACCESS_KEY_ID = "aws_access_key_id"
 SOURCE_CONFIG_KEY_AWS_SECRET_ACCESS_KEY = "aws_secret_access_key"

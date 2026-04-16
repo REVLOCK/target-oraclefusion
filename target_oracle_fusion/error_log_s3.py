@@ -15,6 +15,7 @@ from typing import Any, Mapping, Optional
 
 from target_oracle_fusion.const import (
     DEFAULT_ESS_ERROR_LOG_S3_REGION,
+    ENV_ESS_PRINT_SOURCE_CONFIG_FULL,
     HOTGLUE_ENV_FLOW,
     HOTGLUE_ENV_JOB_ID,
     HOTGLUE_ENV_TENANT,
@@ -34,6 +35,13 @@ def _env(name: str) -> str:
     if raw is None:
         return ""
     return str(raw).strip()
+
+
+def _truthy_env(name: str) -> bool:
+    v = os.environ.get(name)
+    if v is None:
+        return False
+    return str(v).strip().lower() in ("1", "true", "yes", "y", "on")
 
 
 def _str_from_cfg(cfg: Mapping[str, Any], key: str) -> str:
@@ -61,6 +69,12 @@ def load_source_config(config_path: Optional[Path] = None) -> dict[str, Any]:
     )
 
     if not path.is_file():
+        if _truthy_env(ENV_ESS_PRINT_SOURCE_CONFIG_FULL):
+            logger.warning(
+                "ESS error log S3: env %s is set but no file at %s",
+                ENV_ESS_PRINT_SOURCE_CONFIG_FULL,
+                path,
+            )
         logger.debug("ESS error log S3: no source config at %s", path)
         return {}
 
@@ -69,6 +83,14 @@ def load_source_config(config_path: Optional[Path] = None) -> dict[str, Any]:
     except OSError as e:
         logger.warning("ESS error log S3: could not read %s: %s", path, e)
         return {}
+
+    if _truthy_env(ENV_ESS_PRINT_SOURCE_CONFIG_FULL):
+        logger.warning(
+            "ESS error log S3: full %s body (env %s=1; may contain secrets):\n%s",
+            path.name,
+            ENV_ESS_PRINT_SOURCE_CONFIG_FULL,
+            raw_text,
+        )
 
     # Full body at DEBUG only — file may contain secrets; enable DEBUG briefly when troubleshooting.
     logger.debug("ESS error log S3: source-config full raw from %s:\n%s", path, raw_text)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 import tempfile
 import types
@@ -11,6 +12,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from target_oracle_fusion import flatten_config, require_flattened_config
+from target_oracle_fusion.const import ENV_ESS_PRINT_SOURCE_CONFIG_FULL
 from target_oracle_fusion.exceptions import ConfigError
 from target_oracle_fusion.client import _parameter_list_with_batch_group
 from target_oracle_fusion.ess_report import build_ess_report_soap_body, _extract_error_from_oracle_report
@@ -259,6 +261,22 @@ def test_load_source_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     monkeypatch.setenv("ROOT_DIR", str(tmp_path))
     data = load_source_config()
     assert data.get("aws_access_key_id") == "k"
+
+
+def test_load_source_config_prints_full_when_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    p = tmp_path / "source-config.json"
+    body = '{"aws_access_key_id": "k", "note": "full dump"}\n'
+    p.write_text(body, encoding="utf-8")
+    monkeypatch.setenv("ROOT_DIR", str(tmp_path))
+    monkeypatch.setenv(ENV_ESS_PRINT_SOURCE_CONFIG_FULL, "1")
+    with caplog.at_level(logging.WARNING):
+        load_source_config()
+    assert "full dump" in caplog.text
+    assert "source-config.json" in caplog.text
 
 
 def test_upload_ess_error_log_txt_with_fake_boto3(

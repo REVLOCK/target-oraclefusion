@@ -133,6 +133,34 @@ def format_output_path_prefix(template: str) -> str:
     return out
 
 
+def s3_config_gaps(cfg: Mapping[str, Any]) -> list[str]:
+    """Human-readable missing pieces for logs (no secret values)."""
+    gaps: list[str] = []
+    if not _str_from_cfg(cfg, SOURCE_CONFIG_KEY_AWS_ACCESS_KEY_ID):
+        gaps.append("config.aws_access_key_id")
+    if not _str_from_cfg(cfg, SOURCE_CONFIG_KEY_AWS_SECRET_ACCESS_KEY):
+        gaps.append("config.aws_secret_access_key")
+    if not _str_from_cfg(cfg, SOURCE_CONFIG_KEY_BUCKET):
+        gaps.append("config.bucket")
+    if not _str_from_cfg(cfg, SOURCE_CONFIG_KEY_OUTPUT_PATH_PREFIX):
+        gaps.append("config.output_path_prefix")
+    if not _env(HOTGLUE_ENV_TENANT):
+        gaps.append(f"env.{HOTGLUE_ENV_TENANT}")
+    if not _env(HOTGLUE_ENV_FLOW):
+        gaps.append(f"env.{HOTGLUE_ENV_FLOW}")
+    if not _env(HOTGLUE_ENV_JOB_ID):
+        gaps.append(f"env.{HOTGLUE_ENV_JOB_ID}")
+    if gaps:
+        return gaps
+    formatted = format_output_path_prefix(_str_from_cfg(cfg, SOURCE_CONFIG_KEY_OUTPUT_PATH_PREFIX))
+    if not formatted:
+        gaps.append(
+            "output_path_prefix_expanded_empty "
+            "(use {tenant}/{flow_id}/{job_id} in template; env TENANT, FLOW, JOB_ID must be set)"
+        )
+    return gaps
+
+
 def s3_upload_configured(cfg: Mapping[str, Any]) -> bool:
     """True when ``source-config`` has S3 fields, Hotglue env is set, and ``output_path_prefix`` formats to a path."""
     has_id = bool(_str_from_cfg(cfg, SOURCE_CONFIG_KEY_AWS_ACCESS_KEY_ID))
@@ -195,10 +223,11 @@ def upload_ess_error_log_txt(
         len(cfg),
     )
     if not s3_upload_configured(cfg):
+        gap_txt = "; ".join(s3_config_gaps(cfg))
         logger.info(
-            "ESS error log S3 skipped: add aws_access_key_id, aws_secret_access_key, bucket, output_path_prefix "
-            "to Hotglue target config (or source-config.json) and set env TENANT, FLOW, JOB_ID (merged keys=%d)",
+            "ESS error log S3 skipped (merged keys=%d): %s",
             len(cfg),
+            gap_txt or "unknown gap (see DEBUG)",
         )
         logger.debug("ESS error log S3 upload skipped (source-config or Hotglue env incomplete)")
         return None

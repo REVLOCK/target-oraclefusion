@@ -20,6 +20,7 @@ from target_oracle_fusion.error_log_s3 import (
     load_source_config,
     merged_s3_config,
     resolve_error_log_s3_key,
+    s3_config_gaps,
     s3_upload_configured,
     upload_ess_error_log_txt,
 )
@@ -222,6 +223,14 @@ def test_resolve_error_log_s3_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("JOB_ID", "j")
     cfg = _source_cfg_template()
     assert resolve_error_log_s3_key(cfg, "567654.txt") == "t/flows/f/jobs/j/567654.txt"
+
+
+def test_s3_config_gaps(monkeypatch: pytest.MonkeyPatch) -> None:
+    for k in ("TENANT", "FLOW", "JOB_ID"):
+        monkeypatch.delenv(k, raising=False)
+    gaps = s3_config_gaps({"bucket": "only-bucket"})
+    assert "config.aws_access_key_id" in gaps
+    assert "env.TENANT" in gaps
 
 
 def test_s3_upload_configured(monkeypatch: pytest.MonkeyPatch) -> None:

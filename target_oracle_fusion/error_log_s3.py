@@ -154,6 +154,11 @@ def upload_ess_error_log_txt(
         len(cfg),
     )
     if not s3_upload_configured(cfg):
+        logger.info(
+            "ESS error log S3 skipped: need source-config.json with aws_access_key_id, aws_secret_access_key, "
+            "bucket, output_path_prefix and Hotglue env TENANT, FLOW, JOB_ID (loaded config keys=%d)",
+            len(cfg),
+        )
         logger.debug("ESS error log S3 upload skipped (source-config or Hotglue env incomplete)")
         return None
 
@@ -168,6 +173,13 @@ def upload_ess_error_log_txt(
         return None
 
     key = resolve_error_log_s3_key(cfg, path.name)
+    logger.info(
+        "ESS error log S3 uploading bucket=%s key=%s region=%s file=%s",
+        bucket,
+        key,
+        region,
+        path.name,
+    )
     logger.debug(
         "ESS error log S3: upload_file bucket=%s key=%s region=%s local_path=%s size=%s",
         bucket,
@@ -180,7 +192,9 @@ def upload_ess_error_log_txt(
     try:
         import boto3  # type: ignore[import-untyped]
     except ImportError:
-        logger.warning("ESS error log S3 upload skipped: boto3 missing; install target-oracle-fusion[s3]")
+        logger.info(
+            "ESS error log S3 skipped: boto3 not installed; install target-oracle-fusion[s3] in the target env",
+        )
         return None
 
     try:
@@ -197,9 +211,9 @@ def upload_ess_error_log_txt(
             ExtraArgs={"ContentType": "text/plain; charset=utf-8"},
         )
     except Exception as e:
-        logger.warning("ESS error log S3 upload failed: %s", e)
+        logger.info("ESS error log S3 upload failed: %s", e)
         return None
 
     uri = f"s3://{bucket}/{key}"
-    logger.info("Uploaded ESS error log (request_id=%s, file=%s) → %s", request_id, path.name, uri)
+    logger.info("ESS error log S3 done (request_id=%s, file=%s) → %s", request_id, path.name, uri)
     return uri

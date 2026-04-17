@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import shutil
 import time
 import zipfile
@@ -17,9 +16,6 @@ from target_oracle_fusion.const import (
     DEFAULT_MAX_WAIT_SECONDS,
     DEFAULT_OUTPUT_PATH,
     DEFAULT_POLL_INTERVAL_SECONDS,
-    HOTGLUE_ENV_FLOW,
-    HOTGLUE_ENV_JOB_ID,
-    HOTGLUE_ENV_TENANT,
     INPUT_FILENAME,
     OUTPUT_FILENAME,
     REQUIRED_CONFIG_KEYS,
@@ -160,6 +156,13 @@ def load_journal_entries(
     return result
 
 
+def _copy_input_to_output_workspace(config: dict) -> None:
+    """Copy the configured input CSV into ``DEFAULT_OUTPUT_PATH`` (e.g. for failure diagnostics)."""
+    src = Path(config["input_path"]) / INPUT_FILENAME
+    dest = Path(DEFAULT_OUTPUT_PATH) / INPUT_FILENAME
+    shutil.copy2(src, dest)
+
+
 def _upload_to_oracle_fusion(
     zip_path: Path,
     config: dict,
@@ -182,16 +185,6 @@ def _upload_to_oracle_fusion(
 
 def upload(config: dict) -> TransformResult:
     logger.info("Upload started.")
-    # Testing: HOTGLUE job env (same as error_log_s3 prefix expansion); remove when done.
-    logger.info(
-        "HOTGLUE env %s=%r %s=%r %s=%r",
-        HOTGLUE_ENV_TENANT,
-        (os.environ.get(HOTGLUE_ENV_TENANT) or "").strip(),
-        HOTGLUE_ENV_FLOW,
-        (os.environ.get(HOTGLUE_ENV_FLOW) or "").strip(),
-        HOTGLUE_ENV_JOB_ID,
-        (os.environ.get(HOTGLUE_ENV_JOB_ID) or "").strip(),
-    )
 
     config = flatten_config(config)
     require_flattened_config(config)
@@ -206,10 +199,12 @@ def upload(config: dict) -> TransformResult:
             fail_on_validation_error=True,
         )
 
-        zip_path = _zip_output(result.output_path)
-        _safe_unlink(result.output_path, label="intermediate CSV")
+        _copy_input_to_output_workspace(config)
 
+        zip_path = _zip_output(result.output_path)
         _upload_to_oracle_fusion(zip_path, config, batch_group_id=result.batch_group_id)
+
+        _safe_unlink(result.output_path, label="intermediate CSV")
 
         if result.fail_count > 0:
             logger.warning("Upload done with %d failed rows (see logs).", result.fail_count)

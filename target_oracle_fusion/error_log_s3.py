@@ -1,4 +1,4 @@
-"""Upload a local text file to S3 using config + environment settings."""
+"""Upload ESS failure artifacts to S3 (zip of journal input, GL CSV, Oracle error log)."""
 
 from __future__ import annotations
 
@@ -6,10 +6,13 @@ import importlib
 import logging
 import os
 import sys
+import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
 from target_oracle_fusion.const import (
+    DEFAULT_OUTPUT_PATH,
     ENV_AWS_ACCESS_KEY_ID,
     ENV_AWS_S3_BUCKET,
     ENV_AWS_SECRET_ACCESS_KEY,
@@ -17,6 +20,8 @@ from target_oracle_fusion.const import (
     HOTGLUE_ENV_FLOW,
     HOTGLUE_ENV_JOB_ID,
     HOTGLUE_ENV_TENANT,
+    INPUT_FILENAME,
+    OUTPUT_FILENAME,
 )
 
 logger = logging.getLogger(__name__)
@@ -124,63 +129,107 @@ def s3_config_gaps(cfg: Mapping[str, Any]) -> list[str]:
     return gaps
 
 
-def upload_ess_error_log_txt(
+def _collect_bundle_members(local_txt_path: Path) -> list[tuple[Path, str]]:
+    """Return (path, arcname) for journal + GL CSV under ``DEFAULT_OUTPUT_PATH`` plus Oracle ``.txt``."""
+    members: list[tuple[Path, str]] = []
+    used_names: set[str] = set()
+    root = Path(DEFAULT_OUTPUT_PATH)
+
+    def _add(path: Path, label: str) -> None:
+        if not path.is_file():
+            logger.info("ESS failure bundle: skip %s (not a file): %s", label, path)
+            return
+        name = path.name
+        if name in used_names:
+            name = f"{label}_{name}"
+        used_names.add(name)
+        members.append((path, name))
+
+    _add(root / INPUT_FILENAME, "input")
+    _add(root / f"{OUTPUT_FILENAME}.csv", "transformed")
+    _add(Path(local_txt_path), "error_log")
+    return members
+
+
+def upload_ess_failure_bundle_zip(
     local_txt_path: Path,
     request_id: str,
     *,
     source_config: Optional[dict[str, Any]] = None,
 ) -> Optional[str]:
-    """Upload ``local_txt_path`` to S3 and return ``s3://...`` or ``None``."""
+    """Zip journal input, transformed GL CSV, and Oracle error ``.txt``, upload to S3.
+
+    Returns ``s3://...`` or ``None`` when skipped or upload fails.
+    """
     cfg = dict(source_config or {})
     gaps = s3_config_gaps(cfg)
     if gaps:
         gap_txt = "; ".join(gaps)
         logger.info(
-            "ESS error log S3 skipped: %s",
+            "ESS failure bundle S3 skipped: %s",
             gap_txt or "unknown gap (see DEBUG)",
         )
+        return None
+
+    txt_path = Path(local_txt_path)
+    if not txt_path.is_file():
+        logger.warning("ESS failure bundle S3 skipped: error log not a file: %s", txt_path)
+        return None
+
+    members = _collect_bundle_members(txt_path)
+    if not members:
+        logger.warning("ESS failure bundle S3 skipped: no files to zip")
         return None
 
     access = _s3_value(cfg, ENV_AWS_ACCESS_KEY_ID)
     secret = _s3_value(cfg, ENV_AWS_SECRET_ACCESS_KEY)
     bucket = _s3_value(cfg, ENV_AWS_S3_BUCKET)
-    path = Path(local_txt_path)
-    if not path.is_file():
-        logger.warning("ESS error log S3 upload skipped: not a file: %s", path)
-        return None
 
     try:
         boto3 = _import_boto3()
     except ImportError:
         logger.info(
-            "ESS error log S3 skipped: boto3 unavailable in target runtime; verify deploy dependencies",
+            "ESS failure bundle S3 skipped: boto3 unavailable in target runtime; verify deploy dependencies",
         )
         return None
 
-    key = resolve_error_log_s3_key(path.name)
-    logger.info(
-        "ESS error log S3 uploading bucket=%s key=%s file=%s",
-        bucket,
-        key,
-        path.name,
-    )
-
+    bundle_name = f"{request_id}-ess-failure-bundle.zip"
+    key = resolve_error_log_s3_key(bundle_name)
+    tmp_zip: str | None = None
     try:
+        fd, tmp_zip = tempfile.mkstemp(suffix=".zip")
+        os.close(fd)
+        with zipfile.ZipFile(tmp_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+            for path, arcname in members:
+                zf.write(path, arcname=arcname)
+
+        logger.info(
+            "ESS failure bundle S3 uploading bucket=%s key=%s members=%s",
+            bucket,
+            key,
+            [a for _, a in members],
+        )
         client = boto3.client(
             "s3",
             aws_access_key_id=access,
             aws_secret_access_key=secret,
         )
         client.upload_file(
-            str(path),
+            tmp_zip,
             bucket,
             key,
-            ExtraArgs={"ContentType": "text/plain; charset=utf-8"},
+            ExtraArgs={"ContentType": "application/zip"},
         )
     except Exception as e:
-        logger.info("ESS error log S3 upload failed: %s", e)
+        logger.info("ESS failure bundle S3 upload failed: %s", e)
         return None
+    finally:
+        if tmp_zip and Path(tmp_zip).exists():
+            try:
+                Path(tmp_zip).unlink()
+            except OSError:
+                pass
 
     uri = f"s3://{bucket}/{key}"
-    logger.info("ESS error log S3 done (request_id=%s, file=%s) → %s", request_id, path.name, uri)
+    logger.info("ESS failure bundle S3 done (request_id=%s) → %s", request_id, uri)
     return uri

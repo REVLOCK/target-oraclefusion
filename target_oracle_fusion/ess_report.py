@@ -266,7 +266,9 @@ def extract_first_error_from_log(
         if not txt_path:
             return "Error log file not found in download"
 
-        error_log_s3.upload_ess_error_log_txt(txt_path, request_id, source_config=pipeline_config)
+        error_log_s3.upload_ess_failure_bundle_zip(
+            txt_path, request_id, source_config=pipeline_config
+        )
 
         content = txt_path.read_text(encoding="utf-8", errors="replace")
         error_msg = _extract_error_from_oracle_report(content, request_id)

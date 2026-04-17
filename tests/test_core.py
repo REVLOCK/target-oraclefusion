@@ -14,12 +14,13 @@ from target_oracle_fusion import flatten_config, require_flattened_config
 from target_oracle_fusion.exceptions import ConfigError
 from target_oracle_fusion.client import _parameter_list_with_batch_group
 from target_oracle_fusion.ess_report import build_ess_report_soap_body, _extract_error_from_oracle_report
+from target_oracle_fusion import error_log_s3
 from target_oracle_fusion.error_log_s3 import (
     build_s3_object_key,
     format_output_path_prefix,
     resolve_error_log_s3_key,
     s3_config_gaps,
-    upload_ess_error_log_txt,
+    upload_ess_failure_bundle_zip,
 )
 from target_oracle_fusion.transformer import department_segment, transform_csv
 
@@ -239,7 +240,7 @@ def test_s3_upload_configured_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s3_config_gaps({}) == []
 
 
-def test_upload_ess_error_log_txt_with_fake_boto3(
+def test_upload_ess_failure_bundle_zip_with_fake_boto3(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -250,10 +251,20 @@ def test_upload_ess_error_log_txt_with_fake_boto3(
     monkeypatch.setenv("TENANT", "acme")
     monkeypatch.setenv("FLOW", "FZev7QqK")
     monkeypatch.setenv("JOB_ID", "ZVonkl")
+    monkeypatch.setattr(error_log_s3, "DEFAULT_OUTPUT_PATH", str(tmp_path))
 
+    journal = tmp_path / "JournalEntries.csv"
+    journal.write_text("j", encoding="utf-8")
+    gl = tmp_path / "GL_INTERFACE.csv"
+    gl.write_text("g", encoding="utf-8")
     txt = tmp_path / "4360991.txt"
     txt.write_text("err", encoding="utf-8")
-    uri = upload_ess_error_log_txt(txt, "4360991", source_config=_source_cfg_template())
-    assert uri == "s3://revnue/acme/flows/FZev7QqK/jobs/ZVonkl/4360991.txt"
+
+    uri = upload_ess_failure_bundle_zip(txt, "4360991", source_config=_source_cfg_template())
+    assert uri == (
+        "s3://revnue/acme/flows/FZev7QqK/jobs/ZVonkl/4360991-ess-failure-bundle.zip"
+    )
     mock_s3.upload_file.assert_called_once()
+    _upload_args, upload_kwargs = mock_s3.upload_file.call_args
+    assert upload_kwargs["ExtraArgs"]["ContentType"] == "application/zip"
     mock_boto_client.assert_called_once()

@@ -20,7 +20,7 @@ from target_oracle_fusion.error_log_s3 import (
     format_output_path_prefix,
     resolve_error_log_s3_key,
     s3_config_gaps,
-    upload_ess_failure_bundle_zip,
+    upload_ess_failure_artifacts,
 )
 from target_oracle_fusion.transformer import department_segment, transform_csv
 
@@ -240,7 +240,7 @@ def test_s3_upload_configured_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s3_config_gaps({}) == []
 
 
-def test_upload_ess_failure_bundle_zip_with_fake_boto3(
+def test_upload_ess_failure_artifacts_with_fake_boto3(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -260,11 +260,30 @@ def test_upload_ess_failure_bundle_zip_with_fake_boto3(
     txt = tmp_path / "4360991.txt"
     txt.write_text("err", encoding="utf-8")
 
-    uri = upload_ess_failure_bundle_zip(txt, "4360991", source_config=_source_cfg_template())
-    assert uri == (
-        "s3://revnue/acme/flows/FZev7QqK/jobs/ZVonkl/4360991-ess-failure-bundle.zip"
+    prefix = "s3://revnue/acme/flows/FZev7QqK/jobs/ZVonkl"
+    uri = upload_ess_failure_artifacts(txt, "4360991", source_config=_source_cfg_template())
+    assert uri == "\n".join(
+        [
+            f"{prefix}/JournalEntries.csv",
+            f"{prefix}/GL_INTERFACE.csv",
+            f"{prefix}/4360991.txt",
+        ]
     )
-    mock_s3.upload_file.assert_called_once()
-    _upload_args, upload_kwargs = mock_s3.upload_file.call_args
-    assert upload_kwargs["ExtraArgs"]["ContentType"] == "application/zip"
+    assert mock_s3.upload_file.call_count == 3
+    keys_and_types = [
+        (c.args[2], c.kwargs["ExtraArgs"]["ContentType"])
+        for c in mock_s3.upload_file.call_args_list
+    ]
+    assert (
+        "acme/flows/FZev7QqK/jobs/ZVonkl/JournalEntries.csv",
+        "text/csv; charset=utf-8",
+    ) in keys_and_types
+    assert (
+        "acme/flows/FZev7QqK/jobs/ZVonkl/GL_INTERFACE.csv",
+        "text/csv; charset=utf-8",
+    ) in keys_and_types
+    assert (
+        f"acme/flows/FZev7QqK/jobs/ZVonkl/4360991.txt",
+        "text/plain; charset=utf-8",
+    ) in keys_and_types
     mock_boto_client.assert_called_once()

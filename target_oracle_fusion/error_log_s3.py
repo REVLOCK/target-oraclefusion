@@ -1,4 +1,4 @@
-"""Upload ESS failure artifacts to S3 (zip of journal input, GL CSV, Oracle error log)."""
+"""Upload ESS failure artifacts to S3 (journal CSV, GL CSV, Oracle error log as separate objects)."""
 
 from __future__ import annotations
 
@@ -6,8 +6,6 @@ import importlib
 import logging
 import os
 import sys
-import tempfile
-import zipfile
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
@@ -129,56 +127,69 @@ def s3_config_gaps(cfg: Mapping[str, Any]) -> list[str]:
     return gaps
 
 
-def _collect_bundle_members(local_txt_path: Path) -> list[tuple[Path, str]]:
-    """Return (path, arcname) for journal + GL CSV under ``DEFAULT_OUTPUT_PATH`` plus Oracle ``.txt``."""
-    members: list[tuple[Path, str]] = []
-    used_names: set[str] = set()
+def _failure_artifact_uploads(local_txt_path: Path) -> list[tuple[Path, str]]:
+    """Return ``(local_path, s3_object_basename)`` for journal, GL CSV, and Oracle error log."""
     root = Path(DEFAULT_OUTPUT_PATH)
+    uploads: list[tuple[Path, str]] = []
 
-    def _add(path: Path, label: str) -> None:
-        if not path.is_file():
-            logger.info("ESS failure bundle: skip %s (not a file): %s", label, path)
-            return
-        name = path.name
-        if name in used_names:
-            name = f"{label}_{name}"
-        used_names.add(name)
-        members.append((path, name))
+    journal = root / INPUT_FILENAME
+    if journal.is_file():
+        uploads.append((journal, INPUT_FILENAME))
+    else:
+        logger.info("ESS failure S3: skip input (not a file): %s", journal)
 
-    _add(root / INPUT_FILENAME, "input")
-    _add(root / f"{OUTPUT_FILENAME}.csv", "transformed")
-    _add(Path(local_txt_path), "error_log")
-    return members
+    gl_csv = root / f"{OUTPUT_FILENAME}.csv"
+    if gl_csv.is_file():
+        uploads.append((gl_csv, f"{OUTPUT_FILENAME}.csv"))
+    else:
+        logger.info("ESS failure S3: skip transformed (not a file): %s", gl_csv)
+
+    txt_path = Path(local_txt_path)
+    if txt_path.is_file():
+        uploads.append((txt_path, txt_path.name))
+    else:
+        logger.info("ESS failure S3: skip error log (not a file): %s", txt_path)
+
+    return uploads
 
 
-def upload_ess_failure_bundle_zip(
+def _content_type_for_failure_upload(s3_basename: str) -> str:
+    if s3_basename.lower().endswith(".txt"):
+        return "text/plain; charset=utf-8"
+    return "text/csv; charset=utf-8"
+
+
+def upload_ess_failure_artifacts(
     local_txt_path: Path,
     request_id: str,
     *,
     source_config: Optional[dict[str, Any]] = None,
 ) -> Optional[str]:
-    """Zip journal input, transformed GL CSV, and Oracle error ``.txt``, upload to S3.
+    """Upload journal CSV, GL CSV, and Oracle error ``.txt`` as separate S3 objects.
 
-    Returns ``s3://...`` or ``None`` when skipped or upload fails.
+    CSVs use fixed names ``JournalEntries.csv`` and ``GL_INTERFACE.csv``; the Oracle
+    error log keeps its original ``.txt`` basename. Returns newline-separated ``s3://``
+    URIs for successful uploads,
+    or ``None`` if nothing was uploaded (skipped or all failed).
     """
     cfg = dict(source_config or {})
     gaps = s3_config_gaps(cfg)
     if gaps:
         gap_txt = "; ".join(gaps)
         logger.info(
-            "ESS failure bundle S3 skipped: %s",
+            "ESS failure artifacts S3 skipped: %s",
             gap_txt or "unknown gap (see DEBUG)",
         )
         return None
 
     txt_path = Path(local_txt_path)
     if not txt_path.is_file():
-        logger.warning("ESS failure bundle S3 skipped: error log not a file: %s", txt_path)
+        logger.warning("ESS failure artifacts S3 skipped: error log not a file: %s", txt_path)
         return None
 
-    members = _collect_bundle_members(txt_path)
-    if not members:
-        logger.warning("ESS failure bundle S3 skipped: no files to zip")
+    uploads = _failure_artifact_uploads(txt_path)
+    if not uploads:
+        logger.warning("ESS failure artifacts S3 skipped: no files to upload")
         return None
 
     access = _s3_value(cfg, ENV_AWS_ACCESS_KEY_ID)
@@ -189,47 +200,38 @@ def upload_ess_failure_bundle_zip(
         boto3 = _import_boto3()
     except ImportError:
         logger.info(
-            "ESS failure bundle S3 skipped: boto3 unavailable in target runtime; verify deploy dependencies",
+            "ESS failure artifacts S3 skipped: boto3 unavailable in target runtime; verify deploy dependencies",
         )
         return None
 
-    bundle_name = f"{request_id}-ess-failure-bundle.zip"
-    key = resolve_error_log_s3_key(bundle_name)
-    tmp_zip: str | None = None
-    try:
-        fd, tmp_zip = tempfile.mkstemp(suffix=".zip")
-        os.close(fd)
-        with zipfile.ZipFile(tmp_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-            for path, arcname in members:
-                zf.write(path, arcname=arcname)
+    client = boto3.client(
+        "s3",
+        aws_access_key_id=access,
+        aws_secret_access_key=secret,
+    )
 
-        logger.info(
-            "ESS failure bundle S3 uploading bucket=%s key=%s members=%s",
-            bucket,
-            key,
-            [a for _, a in members],
-        )
-        client = boto3.client(
-            "s3",
-            aws_access_key_id=access,
-            aws_secret_access_key=secret,
-        )
-        client.upload_file(
-            tmp_zip,
-            bucket,
-            key,
-            ExtraArgs={"ContentType": "application/zip"},
-        )
-    except Exception as e:
-        logger.info("ESS failure bundle S3 upload failed: %s", e)
+    uris: list[str] = []
+    for local_path, s3_basename in uploads:
+        key = resolve_error_log_s3_key(s3_basename)
+        ct = _content_type_for_failure_upload(s3_basename)
+        try:
+            logger.info(
+                "ESS failure artifact S3 uploading bucket=%s key=%s file=%s",
+                bucket,
+                key,
+                local_path.name,
+            )
+            client.upload_file(
+                str(local_path),
+                bucket,
+                key,
+                ExtraArgs={"ContentType": ct},
+            )
+            uris.append(f"s3://{bucket}/{key}")
+        except Exception as e:
+            logger.info("ESS failure artifact S3 upload failed key=%s: %s", key, e)
+
+    if not uris:
         return None
-    finally:
-        if tmp_zip and Path(tmp_zip).exists():
-            try:
-                Path(tmp_zip).unlink()
-            except OSError:
-                pass
-
-    uri = f"s3://{bucket}/{key}"
-    logger.info("ESS failure bundle S3 done (request_id=%s) → %s", request_id, uri)
-    return uri
+    logger.info("ESS failure artifacts S3 done (request_id=%s) → %d object(s)", request_id, len(uris))
+    return "\n".join(uris)

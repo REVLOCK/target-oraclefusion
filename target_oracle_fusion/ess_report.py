@@ -266,7 +266,7 @@ def extract_first_error_from_log(
         if not txt_path:
             return "Error log file not found in download"
 
-        error_log_s3.upload_ess_failure_artifacts(
+        error_log_s3.upload_ess_failure_bundle_zip(
             txt_path, request_id, source_config=pipeline_config
         )
 

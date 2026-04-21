@@ -156,6 +156,13 @@ def load_journal_entries(
     return result
 
 
+def _copy_input_to_output_workspace(config: dict) -> None:
+    """Copy the configured input CSV into ``DEFAULT_OUTPUT_PATH`` (e.g. for failure diagnostics)."""
+    src = Path(config["input_path"]) / INPUT_FILENAME
+    dest = Path(DEFAULT_OUTPUT_PATH) / INPUT_FILENAME
+    shutil.copy2(src, dest)
+
+
 def _upload_to_oracle_fusion(
     zip_path: Path,
     config: dict,
@@ -192,10 +199,12 @@ def upload(config: dict) -> TransformResult:
             fail_on_validation_error=True,
         )
 
-        zip_path = _zip_output(result.output_path)
-        _safe_unlink(result.output_path, label="intermediate CSV")
+        _copy_input_to_output_workspace(config)
 
+        zip_path = _zip_output(result.output_path)
         _upload_to_oracle_fusion(zip_path, config, batch_group_id=result.batch_group_id)
+
+        _safe_unlink(result.output_path, label="intermediate CSV")
 
         if result.fail_count > 0:
             logger.warning("Upload done with %d failed rows (see logs).", result.fail_count)

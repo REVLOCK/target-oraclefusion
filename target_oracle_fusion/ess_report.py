@@ -11,12 +11,13 @@ import tempfile
 import zipfile
 from io import StringIO
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from xml.sax.saxutils import escape
 
 import requests
 
 from target_oracle_fusion import auth
+from target_oracle_fusion import error_log_s3
 from target_oracle_fusion.const import (
     DEFAULT_OUTPUT_PATH,
     ERP_INTEGRATIONS_PATH,
@@ -236,7 +237,12 @@ def _extract_error_from_oracle_report(content: str, request_id: str) -> Optional
     return None
 
 
-def extract_first_error_from_log(document_content_b64: str, request_id: str) -> str:
+def extract_first_error_from_log(
+    document_content_b64: str,
+    request_id: str,
+    *,
+    pipeline_config: Optional[Dict[str, Any]] = None,
+) -> str:
     """Decode zip log, read .txt, return first parsed error (or fallback string)."""
     try:
         zip_bytes = base64.b64decode(document_content_b64)
@@ -259,6 +265,10 @@ def extract_first_error_from_log(document_content_b64: str, request_id: str) -> 
         txt_path = _find_txt_file_in_dir(Path(extract_dir), request_id)
         if not txt_path:
             return "Error log file not found in download"
+
+        error_log_s3.upload_ess_failure_bundle_zip(
+            txt_path, request_id, source_config=pipeline_config
+        )
 
         content = txt_path.read_text(encoding="utf-8", errors="replace")
         error_msg = _extract_error_from_oracle_report(content, request_id)

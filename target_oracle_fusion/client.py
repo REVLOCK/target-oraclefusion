@@ -136,7 +136,11 @@ def _get_detailed_error_message(
     if not doc_content:
         return base_msg
 
-    extracted = ess_report.extract_first_error_from_log(doc_content, failed_req_id)
+    extracted = ess_report.extract_first_error_from_log(
+        doc_content,
+        failed_req_id,
+        pipeline_config=config,
+    )
     if extracted and "Failed to" not in extracted:
         return extracted
 

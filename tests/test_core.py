@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import types
+import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -267,4 +268,10 @@ def test_upload_ess_failure_bundle_zip_with_fake_boto3(
     mock_s3.upload_file.assert_called_once()
     _upload_args, upload_kwargs = mock_s3.upload_file.call_args
     assert upload_kwargs["ExtraArgs"]["ContentType"] == "application/zip"
+    zip_path = Path(_upload_args[0])
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        names = set(zf.namelist())
+    assert "ErrorLog_4360991.txt" in names
+    assert "JournalEntries.csv" in names
+    assert "GL_INTERFACE.csv" in names
     mock_boto_client.assert_called_once()

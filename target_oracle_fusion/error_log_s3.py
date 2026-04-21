@@ -140,6 +140,8 @@ def _collect_bundle_members(local_txt_path: Path) -> list[tuple[Path, str]]:
             logger.info("ESS failure bundle: skip %s (not a file): %s", label, path)
             return
         name = path.name
+        if label == "error_log" and name.lower().endswith(".txt"):
+            name = f"ErrorLog_{name}"
         if name in used_names:
             name = f"{label}_{name}"
         used_names.add(name)

@@ -70,9 +70,13 @@ def _format_date_created() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def _generate_group_id() -> str:
-    """UTC timestamp as 14 digits: yyyyMMddHHmmss."""
-    return datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+def _generate_group_id(config: dict[str, Any] | None = None) -> str:
+    """UTC timestamp as 14 digits (yyyyMMddHHmmss); non-empty config Entity prepended."""
+    suffix = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    if not config:
+        return suffix
+    prefix = _str_from_config(config, "Entity")
+    return f"{prefix}{suffix}" if prefix else suffix
 
 
 def _str_from_config(config: dict[str, Any], key: str) -> str:
@@ -271,7 +275,7 @@ def transform_csv(
     os.close(fd)
     tmp_path = Path(tmp_name)
     wrote_output = False
-    batch_group_id = _generate_group_id()
+    batch_group_id = _generate_group_id(config)
     logger.info("Batch GROUP_ID=%s", batch_group_id)
     result = TransformResult(output_path=output_path, batch_group_id=batch_group_id)
 
